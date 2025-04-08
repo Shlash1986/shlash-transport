@@ -5,6 +5,10 @@
   <title>شركة شلاش ترانسبورت</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
+    body {
+      font-family: Arial, sans-serif;
+    }
+
     header img {
       width: 100%;
       max-width: 100%;
@@ -15,6 +19,29 @@
 
     section img {
       margin: 10px;
+    }
+
+    .whatsapp-big {
+      text-align: center;
+      margin: 40px 0;
+    }
+
+    .whatsapp-big img {
+      width: 100px;
+      transition: 0.3s;
+    }
+
+    .whatsapp-big img:hover {
+      transform: scale(1.1);
+    }
+
+    .qr-code {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .qr-code img {
+      width: 150px;
     }
   </style>
 </head>
@@ -47,15 +74,24 @@
 
   <section>
     <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="صورة خدمة 1" width="300">
-    <img src="https://i.ibb.co/Xfx2Pnyv/about-img.jpg" alt="صورة خدمة 2" width="300">
-    <section>
-  <img src="https://i.ibb.co/KjM57McS/1703244307-9407.jpg" alt="صورة خدمة 1" width="300">
-  <img src="https://i.ibb.co/KjM57McS/1703244307-9407.jpg" alt="صورة خدمة 2" width="300">
-  <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="صورة خدمة 3" width="300">
-  <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="صورة خدمة 4" width="300">
-    </section>
+    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="صورة خدمة 2" width="300">
+    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="صورة خدمة 3" width="300">
     <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="صورة خدمة 4" width="300">
   </section>
+
+  <!-- أيقونة واتساب كبيرة -->
+  <div class="whatsapp-big">
+    <a href="https://wa.me/4366055656676" target="_blank">
+      <img src="https://img.icons8.com/color/96/000000/whatsapp--v1.png" alt="تواصل واتساب">
+    </a>
+    <p>اضغط على الأيقونة للتواصل عبر واتساب</p>
+  </div>
+
+  <!-- رمز QR لواتساب -->
+  <div class="qr-code">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://wa.me/4366055656676" alt="QR واتساب">
+    <p>امسح الرمز للتواصل معنا مباشرة</p>
+  </div>
 
   <footer>
     <p>العنوان: النمسا – تيرول – إنسبروك</p>
