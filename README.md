@@ -1,65 +1,88 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<!DOCTYPE html><html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>شركة شلاش ترانسبورت</title>
+  <style>
+    body {
+      font-family: 'Tahoma', sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f5f5f5;
+      color: #333;
+    }
+    header {
+      background-color: #0a2a7e;
+      color: white;
+      text-align: center;
+      padding: 20px;
+    }
+    header img {
+      width: 80px;
+      height: auto;
+    }
+    section {
+      padding: 20px;
+    }
+    h2 {
+      color: #0a2a7e;
+    }
+    .services, .contact, .gallery {
+      margin-bottom: 30px;
+    }
+    .gallery img {
+      width: 100%;
+      max-width: 300px;
+      margin: 10px;
+      border-radius: 10px;
+    }
+    footer {
+      background-color: #0a2a7e;
+      color: white;
+      text-align: center;
+      padding: 10px;
+    }
+    .whatsapp {
+      position: fixed;
+      bottom: 20px;
+      left: 20px;
+      background-color: #25d366;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 30px;
+      text-decoration: none;
+      font-weight: bold;
+    }
+  </style>
 </head>
 <body>
-
-  <h1>شعار شلاش ترانسبورت</h1>
-  <h2>شركة شلاش ترانسبورت</h2>
-
-  <p>
-    <a href="#">العربية</a> | <a href="#">Deutsch</a> | <a href="#">English</a>
-  </p>
-
-  <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
-  <p><a href="https://wa.me/436601234567">تواصل معنا على واتساب</a></p>
-  <p>info@shlash-transport.com</p>
-  <p>شاحنة 1 - شاحنة 2 - شاحنة 3</p>
-
-  <h3>خدماتنا:</h3>
-  <ul>
-    <li>نقل شاحنات في أوروبا والخليج</li>
-    <li>نقل داخلي ودولي</li>
-    <li>تجارة عامة</li>
-    <li>خدمة 7 أيام بالأسبوع / 24 ساعة</li>
-  </ul>
-
-  <hr>
-
-  <p><strong>Nationaler und internationaler Transport – Allgemeiner Handel – Import & Export</strong></p>
-  <p><a href="https://wa.me/436601234567">Kontakt über WhatsApp</a></p>
-  <p>info@shlash-transport.com</p>
-  <p>LKW 1 - LKW 2 - LKW 3</p>
-
-  <h3>Unsere Dienstleistungen:</h3>
-  <ul>
-    <li>LKW-Transport in Europa und dem Golf</li>
-    <li>Nationaler & internationaler Transport</li>
-    <li>Allgemeiner Handel</li>
-    <li>7 Tage / 24 Stunden Service</li>
-  </ul>
-
-  <hr>
-
-  <p><strong>Domestic and international transport – General trade – Import & export</strong></p>
-  <p><a href="https://wa.me/436601234567">Contact us via WhatsApp</a></p>
-  <p>info@shlash-transport.com</p>
-  <p>Truck 1 - Truck 2 - Truck 3</p>
-
-  <h3>Our Services:</h3>
-  <ul>
-    <li>Truck transport in Europe and the Gulf</li>
-    <li>Domestic & international transport</li>
-    <li>General trade</li>
-    <li>7 days / 24-hour service</li>
-  </ul>
-
-  <footer>
-    <p>جميع الحقوق محفوظة © 2025 شلاش ترانسبورت</p>
-  </footer>
+  <header>
+    <img src="https://i.imgur.com/GZSmYVQ.png" alt="شعار شلاش ترانسبورت">
+    <h1>شلاش ترانسبورت</h1>
+    <p>النقل الداخلي والدولي - التجارة العامة - استيراد وتصدير</p>
+  </header>  <section class="services">
+    <h2>خدماتنا:</h2>
+    <ul>
+      <li>نقل داخلي ودولي في جميع دول الاتحاد الأوروبي</li>
+      <li>شحن بري، جوي، بحري إلى سوريا والعراق</li>
+      <li>تجارة عامة - استيراد وتصدير</li>
+      <li>خدمة 7 أيام / 24 ساعة</li>
+      <li>متوفر عمال لفك وتركيب الأثاث</li>
+      <li>خزن ونقل وتخلص من العفش</li>
+    </ul>
+  </section>  <section class="gallery">
+    <h2>صور من خدماتنا:</h2>
+    <img src="https://images.unsplash.com/photo-1570129477492-45c003edd2be" alt="فان 3.5 طن">
+    <img src="https://images.unsplash.com/photo-161822840476-5cbb388f6b4f" alt="عفش منزلي">
+    <img src="https://images.unsplash.com/photo-1554797589-7241bb691973" alt="عمال تحميل">
+  </section>  <section class="contact">
+    <h2>معلومات التواصل:</h2>
+    <p><strong>رقم واتساب:</strong> +43 6601234567</p>
+    <p><strong>الإيميل:</strong> info@shlash-transport.com</p>
+    <p><strong>العنوان:</strong> النمسا – تيرول – إنسبروك</p>
+  </section>  <footer>
+    جميع الحقوق محفوظة © 2025 شلاش ترانسبورت
+  </footer><a class="whatsapp" href="https://wa.me/436601234567" target="_blank">تواصل واتساب</a>
 
 </body>
 </html>
