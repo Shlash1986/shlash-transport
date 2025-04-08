@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="de" dir="ltr">
+<!DOCTYPE html><html lang="de">
 <head>
   <meta charset="UTF-8">
   <title>Shlash Transport Firma</title>
@@ -6,38 +6,45 @@
   <style>
     body {
       font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
     }
     header img {
       width: 100%;
       max-width: 100%;
       height: auto;
       display: block;
-      margin: 0 auto;
     }
     nav {
       text-align: center;
       margin: 10px;
     }
-    nav a {
-      margin: 0 10px;
-      text-decoration: none;
-      color: blue;
-    }
     .language-switch {
-      text-align: center;
-      margin-top: 10px;
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
     }
     .language-switch button {
-      margin: 0 5px;
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin: 0 2px;
     }
-    section img {
-      margin: 10px;
-      width: 48%;
+    .language-switch img {
+      width: 30px;
+      height: 20px;
     }
     .image-row {
       display: flex;
       flex-wrap: wrap;
       justify-content: center;
+      margin-top: 20px;
+    }
+    .image-row img {
+      margin: 10px;
+      width: 45%;
+      max-width: 300px;
     }
     .whatsapp-big, .qr-code {
       text-align: center;
@@ -53,6 +60,17 @@
     .qr-code img {
       width: 150px;
     }
+    #search-box {
+      margin: 20px auto;
+      text-align: center;
+    }
+    #search-box input {
+      padding: 10px;
+      width: 80%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
   </style>
   <script>
     function switchLanguage(lang) {
@@ -66,9 +84,17 @@
   </script>
 </head>
 <body onload="switchLanguage('de')">  <div class="language-switch">
-    <button onclick="switchLanguage('de')">Deutsch</button>
-    <button onclick="switchLanguage('en')">English</button>
-    <button onclick="switchLanguage('ar')">العربية</button>
+    <button onclick="switchLanguage('de')">
+      <img src="https://flagcdn.com/w40/de.png" alt="Deutsch">
+    </button>
+    <button onclick="switchLanguage('en')">
+      <img src="https://flagcdn.com/w40/gb.png" alt="English">
+    </button>
+    <button onclick="switchLanguage('ar')">
+      <img src="https://flagcdn.com/w40/sa.png" alt="Arabic">
+    </button>
+  </div>  <div id="search-box">
+    <input type="text" placeholder="Suchen / Search / بحث">
   </div>  <!-- German Content -->  <div id="lang-de">
     <header>
       <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="Firmenlogo">
@@ -88,10 +114,10 @@
       <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
     </header>
   </div>  <section class="image-row">
-    <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="Service 1">
-    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="Service 2">
-    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="Service 3">
-    <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="Service 4">
+    <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="صورة 1">
+    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="صورة 2">
+    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="صورة 3">
+    <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="صورة 4">
   </section>  <div class="whatsapp-big">
     <a href="https://wa.me/4366055656676" target="_blank">
       <img src="https://img.icons8.com/color/96/000000/whatsapp--v1.png" alt="WhatsApp Kontakt">
