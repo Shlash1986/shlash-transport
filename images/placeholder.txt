@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>شركة شلاش ترانسبورت</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <header>
+    <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="لوغو الشركة" width="150">
+    <h1>شركة شلاش ترانسبورت</h1>
+    <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
+  </header>
+
+  <nav>
+    <a href="#">الرئيسية</a>
+    <a href="#">الخدمات</a>
+    <a href="#">من نحن</a>
+    <a href="https://wa.me/436605565676">واتساب</a>
+  </nav>
+
+  <section>
+    <h2>خدماتنا:</h2>
+    <ul>
+      <li>نقل داخلي وخارجي في جميع دول الاتحاد الأوروبي</li>
+      <li>شحن بري، جوي، بحري إلى سوريا والعراق</li>
+      <li>تجارة عامة – استيراد وتصدير</li>
+      <li>خدمة 24 ساعة / 7 أيام</li>
+      <li>توفر عمال لفك وتركيب الأثاث</li>
+      <li>تخزين ونقل وتخلّص من العفش</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>صور من خدماتنا:</h2>
+    <img src="https://i.ibb.co/XpNNSj8/van.jpg" alt="فان 3.5 طن" width="300">
+    <img src="https://i.ibb.co/YkTzXcj/furniture.jpg" alt="تحميل وتنزيل عفش" width="300">
+  </section>
+
+  <footer>
+    <p>العنوان: النمسا - تيرول - إنسبروك</p>
+    <p>البريد الإلكتروني: info@shlash-transport.com</p>
+    <p>رقم واتساب: +43 660 5565676</p>
+    <p>© 2025 شلاش ترانسبورت</p>
+  </footer>
+
+</body>
+</html>
