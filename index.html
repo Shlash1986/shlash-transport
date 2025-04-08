@@ -1,14 +1,12 @@
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<!DOCTYPE html><html lang="de" dir="ltr">
 <head>
   <meta charset="UTF-8">
-  <title>شركة شلاش ترانسبورت</title>
+  <title>Shlash Transport Firma</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
     body {
       font-family: Arial, sans-serif;
     }
-
     header img {
       width: 100%;
       max-width: 100%;
@@ -16,95 +14,102 @@
       display: block;
       margin: 0 auto;
     }
-
-    section img {
+    nav {
+      text-align: center;
       margin: 10px;
     }
-
-    .whatsapp-big {
+    nav a {
+      margin: 0 10px;
+      text-decoration: none;
+      color: blue;
+    }
+    .language-switch {
+      text-align: center;
+      margin-top: 10px;
+    }
+    .language-switch button {
+      margin: 0 5px;
+    }
+    section img {
+      margin: 10px;
+      width: 48%;
+    }
+    .image-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .whatsapp-big, .qr-code {
       text-align: center;
       margin: 40px 0;
     }
-
     .whatsapp-big img {
       width: 100px;
       transition: 0.3s;
     }
-
     .whatsapp-big img:hover {
       transform: scale(1.1);
     }
-
-    .qr-code {
-      text-align: center;
-      margin-bottom: 40px;
-    }
-
     .qr-code img {
       width: 150px;
     }
   </style>
+  <script>
+    function switchLanguage(lang) {
+      const de = document.getElementById('lang-de');
+      const en = document.getElementById('lang-en');
+      const ar = document.getElementById('lang-ar');
+      de.style.display = lang === 'de' ? 'block' : 'none';
+      en.style.display = lang === 'en' ? 'block' : 'none';
+      ar.style.display = lang === 'ar' ? 'block' : 'none';
+    }
+  </script>
 </head>
-<body>
-
-  <header>
-    <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="شعار الشركة">
-    <h1>شركة شلاش ترانسبورت</h1>
-    <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
-  </header>
-
-  <nav>
-    <a href="#">الرئيسية</a>
-    <a href="#">الخدمات</a>
-    <a href="#">من نحن</a>
-    <a href="https://wa.me/4366055656676" target="_blank">واتساب</a>
-  </nav>
-
-  <section>
-    <h2></h2>
-    <ul>
-      <li>نقل داخلي وخارجي في جميع دول الاتحاد الأوروبي</li>
-      <li>شحن بري، جوي، بحري إلى سوريا والعراق</li>
-      <li>تجارة عامة - استيراد وتصدير</li>
-      <li>خدمة ٢٤ ساعة على مدار الأسبوع</li>
-      <li>توفر عمال لفك وتركيب الأثاث</li>
-      <li>تخزين ونقل وتخلّص من العفش</li>
-    </ul>
-  </section>
-
-  <section>
-    <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="صورة خدمة 1" width="300">
-    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="صورة خدمة 2" width="300">
-    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="صورة خدمة 3" width="300">
-    <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="صورة خدمة 4" width="300">
-  </section>
-
-  <!-- أيقونة واتساب كبيرة -->
-  <div class="whatsapp-big">
+<body onload="switchLanguage('de')">  <div class="language-switch">
+    <button onclick="switchLanguage('de')">Deutsch</button>
+    <button onclick="switchLanguage('en')">English</button>
+    <button onclick="switchLanguage('ar')">العربية</button>
+  </div>  <!-- German Content -->  <div id="lang-de">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="Firmenlogo">
+      <h1>Shlash Transport Firma</h1>
+      <p>Nationaler & internationaler Transport – Allgemeiner Handel – Import & Export</p>
+    </header>
+  </div>  <!-- English Content -->  <div id="lang-en" style="display:none;">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="Company Logo">
+      <h1>Shlash Transport Company</h1>
+      <p>National & International Transport – General Trade – Import & Export</p>
+    </header>
+  </div>  <!-- Arabic Content -->  <div id="lang-ar" style="display:none;" dir="rtl">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="شعار الشركة">
+      <h1>شركة شلاش ترانسبورت</h1>
+      <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
+    </header>
+  </div>  <section class="image-row">
+    <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="Service 1">
+    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="Service 2">
+    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="Service 3">
+    <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="Service 4">
+  </section>  <div class="whatsapp-big">
     <a href="https://wa.me/4366055656676" target="_blank">
-      <img src="https://img.icons8.com/color/96/000000/whatsapp--v1.png" alt="تواصل واتساب">
+      <img src="https://img.icons8.com/color/96/000000/whatsapp--v1.png" alt="WhatsApp Kontakt">
     </a>
-    <p>اضغط على الأيقونة للتواصل عبر واتساب</p>
-  </div>
-
-  <!-- رمز QR لواتساب -->
-  <div class="qr-code">
-    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://wa.me/4366055656676" alt="QR واتساب">
-    <p>امسح الرمز للتواصل معنا مباشرة</p>
-  </div>
-
-  <footer>
-    <p>العنوان: النمسا – تيرول – إنسبروك</p>
-    <p>البريد الإلكتروني: <a href="mailto:info@shlash-transport.com">info@shlash-transport.com</a></p>
+    <p>Jetzt per WhatsApp kontaktieren</p>
+  </div>  <div class="qr-code">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://wa.me/4366055656676" alt="WhatsApp QR Code">
+    <p>QR-Code scannen, um uns auf WhatsApp zu erreichen</p>
+  </div>  <footer style="text-align:center">
+    <p>Adresse: Innsbruck, Tirol, Österreich</p>
+    <p>E-Mail: <a href="mailto:info@shlash-transport.com">info@shlash-transport.com</a></p>
     <p>
-      رقم واتساب:
+      WhatsApp Nummer:
       <a href="https://wa.me/4366055656676" target="_blank">
-        <img src="https://img.icons8.com/color/48/000000/whatsapp.png" alt="واتساب" width="24">
+        <img src="https://img.icons8.com/color/48/000000/whatsapp.png" alt="WhatsApp" width="24">
         +43 660 5565676
       </a>
     </p>
-    <p>© 2025 شلاش ترانسبورت</p>
-  </footer>
-
-</body>
+    <p>&copy; 2025 Shlash Transport</p>
+  </footer></body>
 </html>
