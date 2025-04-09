@@ -1,68 +1,141 @@
-<!DOCTYPE html>
-<html lang="de">
+<!DOCTYPE html><html lang="de">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Shlash Transport Firma</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-            line-height: 1.6;
-            color: #333;
-        }
-        h1 {
-            color: #2c3e50;
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        .divider {
-            border-top: 1px solid #eee;
-            margin: 20px 0;
-        }
-        .contact-info {
-            margin: 15px 0;
-            font-size: 1.1em;
-        }
-        .whatsapp-section {
-            background-color: #f8f9fa;
-            padding: 15px;
-            border-radius: 5px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        a {
-            color: #0066cc;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <title>Shlash Transport Firma</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    header img {
+      width: 100%;
+      max-width: 100%;
+      height: auto;
+      display: block;
+    }
+    nav {
+      text-align: center;
+      margin: 10px;
+    }
+    .language-switch {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 1000;
+    }
+    .language-switch button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      margin: 0 2px;
+    }
+    .language-switch img {
+      width: 30px;
+      height: 20px;
+    }
+    .image-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 20px;
+    }
+    .image-row img {
+      margin: 10px;
+      width: 45%;
+      max-width: 300px;
+    }
+    .whatsapp-big, .qr-code {
+      text-align: center;
+      margin: 40px 0;
+    }
+    .whatsapp-big img {
+      width: 100px;
+      transition: 0.3s;
+    }
+    .whatsapp-big img:hover {
+      transform: scale(1.1);
+    }
+    .qr-code img {
+      width: 150px;
+    }
+    #search-box {
+      margin: 20px auto;
+      text-align: center;
+    }
+    #search-box input {
+      padding: 10px;
+      width: 80%;
+      max-width: 400px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+  </style>
+  <script>
+    function switchLanguage(lang) {
+      const de = document.getElementById('lang-de');
+      const en = document.getElementById('lang-en');
+      const ar = document.getElementById('lang-ar');
+      de.style.display = lang === 'de' ? 'block' : 'none';
+      en.style.display = lang === 'en' ? 'block' : 'none';
+      ar.style.display = lang === 'ar' ? 'block' : 'none';
+    }
+  </script>
 </head>
-<body>
-    <h1>Shlash<br>Transport<br>Firma</h1>
-    
-    <p>Nationaler & internationaler Transport – Allgemeiner Handel – Import & Export</p>
-    
-    <div class="divider"></div>
-    
-    <div class="contact-info">
-        <p><strong>Website:</strong> <a href="https://shlash.com/" target="_blank">https://shlash.com/</a></p>
-    </div>
-    
-    <div class="divider"></div>
-    
-    <div class="whatsapp-section">
-        <h3>Jetzt per WhatsApp kontaktieren</h3>
-        <p>QR-Code scannen, um uns auf WhatsApp zu erreichen</p>
-    </div>
-    
-    <div class="contact-info">
-        <p><strong>E-Mail:</strong> <a href="mailto:info@shlash-transport.com">info@shlash-transport.com</a></p>
-        <p><strong>Telefon:</strong> +43 660 5565676</p>
-    </div>
-</body>
+<body onload="switchLanguage('de')">  <div class="language-switch">
+    <button onclick="switchLanguage('de')">
+      <img src="https://flagcdn.com/w40/de.png" alt="Deutsch">
+    </button>
+    <button onclick="switchLanguage('en')">
+      <img src="https://flagcdn.com/w40/gb.png" alt="English">
+    </button>
+    <button onclick="switchLanguage('ar')">
+      <img src="https://flagcdn.com/w40/sa.png" alt="Arabic">
+    </button>
+  </div>  <div id="search-box">
+    <input type="text" placeholder="Suchen / Search / بحث">
+  </div>  <!-- German Content -->  <div id="lang-de">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="Firmenlogo">
+      <h1>Shlash Transport Firma</h1>
+      <p>Nationaler & internationaler Transport – Allgemeiner Handel – Import & Export</p>
+    </header>
+  </div>  <!-- English Content -->  <div id="lang-en" style="display:none;">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="Company Logo">
+      <h1>Shlash Transport Company</h1>
+      <p>National & International Transport – General Trade – Import & Export</p>
+    </header>
+  </div>  <!-- Arabic Content -->  <div id="lang-ar" style="display:none;" dir="rtl">
+    <header>
+      <img src="https://i.ibb.co/Y4JC41CW/Screenshot-Word.jpg" alt="شعار الشركة">
+      <h1>شركة شلاش ترانسبورت</h1>
+      <p>نقل داخلي ودولي – تجارة عامة – استيراد وتصدير</p>
+    </header>
+  </div>  <section class="image-row">
+    <img src="https://i.ibb.co/KjM57Mc/1703244307-9407.jpg" alt="صورة 1">
+    <img src="https://i.ibb.co/7vwTcrN/transport.jpg" alt="صورة 2">
+    <img src="https://i.ibb.co/D2mTsGH/b1.jpg" alt="صورة 3">
+    <img src="https://i.ibb.co/1Gg99DK3/b2.jpg" alt="صورة 4">
+  </section>  <div class="whatsapp-big">
+    <a href="https://wa.me/4366055656676" target="_blank">
+      <img src="https://img.icons8.com/color/96/000000/whatsapp--v1.png" alt="WhatsApp Kontakt">
+    </a>
+    <p>Jetzt per WhatsApp kontaktieren</p>
+  </div>  <div class="qr-code">
+    <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://wa.me/4366055656676" alt="WhatsApp QR Code">
+    <p>QR-Code scannen, um uns auf WhatsApp zu erreichen</p>
+  </div>  <footer style="text-align:center">
+    <p>Adresse: Innsbruck, Tirol, Österreich</p>
+    <p>E-Mail: <a href="mailto:info@shlash-transport.com">info@shlash-transport.com</a></p>
+    <p>
+      WhatsApp Nummer:
+      <a href="https://wa.me/4366055656676" target="_blank">
+        <img src="https://img.icons8.com/color/48/000000/whatsapp.png" alt="WhatsApp" width="24">
+        +43 660 5565676
+      </a>
+    </p>
+    <p>&copy; 2025 Shlash Transport</p>
+  </footer></body>
 </html>
