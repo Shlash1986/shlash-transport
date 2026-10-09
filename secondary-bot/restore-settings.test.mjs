@@ -3,7 +3,7 @@ import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 const filename=process.argv[2]||'index.js';
-let source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace("connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
+let source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace("connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'').replace("startBot().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
 const callbacks={},requests=[],sent=[];
 let mode='success';
 const sock={user:{id:'4368120528715:4@s.whatsapp.net'},ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
