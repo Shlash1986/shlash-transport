@@ -130,7 +130,39 @@ function colloquialCottonRoute(text       ){
   const from=cleanPlace(m[1]),to=cleanPlace(m[2]);
   return from&&to?{from_city:from,to_city:to}:null;
 }
+const countryAliases=new Map([
+ ['السعودية','السعودية'],['السعوديه','السعودية'],['المملكة العربية السعودية','السعودية'],
+ ['قطر','قطر'],['الاردن','الأردن'],['سوريا','سوريا'],['العراق','العراق'],
+ ['الامارات','الإمارات'],['الامارات العربية المتحدة','الإمارات'],['لبنان','لبنان'],
+ ['سلطنة عمان','عُمان'],['الكويت','الكويت'],['البحرين','البحرين'],
+ ['تركيا','تركيا'],['مصر','مصر'],['اليمن','اليمن']
+]);
+function explicitEndpoint(value){
+ const n=normalize(value).replace(/^[\s،,:-]+|[\s،,:.-]+$/gu,'');
+ if(countryAliases.has(n))return {city:'غير محددة',country:countryAliases.get(n)};
+ if(cityCountry.has(n))return {city:canonicalPlace(n),country:cityCountry.get(n)};
+ // A country qualifier is descriptive, not a third stop on the route.
+ for(const [alias,country] of countryAliases){
+  for(const suffix of [' '+alias,' في '+alias]){
+   if(!n.endsWith(suffix))continue;
+   const city=n.slice(0,-suffix.length).trim();
+   if(cityCountry.get(city)===country)return {city:canonicalPlace(city),country};
+  }
+ }
+ return null;
+}
+function explicitRoute(text){
+ const n=normalize(text);
+ const match=n.match(/(?:^|[^\p{L}])من\s+(.+?)\s+(?:الى|الي|باتجاه)\s+(.+)$/u);
+ if(!match)return null;
+ const from=explicitEndpoint(match[1]);
+ const destination=match[2].split(/\s+(?:الحمولة|الحموله|حمولة|حموله|وزن|الوزن|للتواصل|رقم|هاتف|تحميل)(?=\s|:)|[\n،,;]|\s+(?=[+\d])/u)[0];
+ const to=explicitEndpoint(destination);
+ if(!from||!to)return null;
+ return {from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country};
+}
 function route(text){
+ const explicit=explicitRoute(text);if(explicit)return explicit;
  const n=normalize(text), hits=[];
  for(const [city] of cityCountry){let pos=n.indexOf(city);while(pos>=0){
   if(placeBoundary(n,pos)&&(pos+city.length===n.length||!/[\p{L}]/u.test(n[pos+city.length])))hits.push({idx:pos,city});
@@ -266,8 +298,8 @@ function parse(rawText       ,fallbackContact            =null){
   const wt=weight(text);
   const tc=count(text);
   const cg=cargo(text);
-  let fc=rt?inferCountry(rt.from_city):null;
-  let toc=rt?inferCountry(rt.to_city):null;
+  let fc=rt?(rt.from_country||inferCountry(rt.from_city)):null;
+  let toc=rt?(rt.to_country||inferCountry(rt.to_city)):null;
   const ph=normalizeContact(rawPh,fallbackContact,fc||toc);
   const wanted=/(?:بدنا|بدي|نبي|عايزين|عاوزين|سياره\s+تحمل|سيارة\s+تحمل|مطلوب|مطلوبه|مطلوبة|مطلوبين|نحتاج|يلزم|يلزمنا|يلزمنه|لازمنا|لزمنا|بحاجه|بحاجة|نريد|تحميل|حموله|حمولة|حمل|تنقل|نقل|برادات\s+من|براد\s+من)/u.test(n);
   const hasVehicle=Boolean(tr)||/(?:براد|برادات|سيارات|سياره|سيارة|شاحنات|شاحنه|شاحنة|تريلا|قاطره|قاطرة|مقطوره|مقطورة|ستارتين|ستارة|ستاره|برادين|سطحتين)/u.test(n);
@@ -444,7 +476,7 @@ async function connect(authDir=dir,candidate=false){
        const preliminary=parse(text,contactFromJid(sender));
        const senderPhone=!phone(text)&&preliminary.kind!=='unknown'?await resolveSenderPhone(sock,m):null;
        const finalParsed=senderPhone?parse(text,senderPhone):preliminary;
-       if(!phone(text)&&preliminary.kind!=='unknown')console.log('Sender contact resolution',JSON.stringify({id:m.key.id,resolved:!!finalParsed.load?.contact_phone}));
+       if(!phone(text)&&preliminary.kind!=='unknown')console.log('Sender contact resolution',JSON.stringify({id:m.key.id,resolved:!!(senderPhone||contactFromJid(sender))}));
        const shouldPublish=finalParsed.publishable&&(finalParsed.kind!=='load'||finalParsed.confidence>=0.86);
        if(!shouldPublish){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
        if(shouldPublish){
