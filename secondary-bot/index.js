@@ -1,4 +1,4 @@
-import {extractFreightAd} from './ai-extractor.js';
+import {extractFreightAd,extractFreightAdFree} from './ai-extractor.js';
 import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import {mkdir} from 'node:fs/promises';
@@ -34,7 +34,8 @@ async function connect(){
        const route=text.match(/(?:من|مِن)\\s+([^\\n،,]+?)\\s+(?:إلى|الى|لـ|ل)\\s+([^\\n،,]+)/);
        const parsed={kind:'load',confidence:route?0.87:0.65,from_city:route?.[1]?.trim()||null,to_city:route?.[2]?.trim()||null,contact_phone:'+'+phone,contact_whatsapp:'+'+phone,raw_text:text};
        // AI analyzes the same received group text when configured. No WhatsApp session changes.
-       let finalParsed=parsed;
+       const free=extractFreightAdFree(text);
+       let finalParsed=free.publish?{...parsed,...free,contact_whatsapp:free.contact_phone}:parsed;
        if(process.env.OPENAI_API_KEY){
          try{
            const ai=await extractFreightAd(text);
