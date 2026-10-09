@@ -324,7 +324,12 @@ await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
-let activeSocket=null,reconnectTimer=null;
+let activeSocket=null;
+const reconnectTimers=new Map();
+const replacementPhone=String(process.env.WA_REPLACEMENT_PHONE||'');
+if(replacementPhone&&!/^[1-9][0-9]{8,14}$/.test(replacementPhone))throw new Error('Invalid replacement phone');
+const replacementDir=replacementPhone?'/data/wa-session-'+replacementPhone:null;
+let pendingSocket=null,replacementQr='',replacementCode='',replacementStatus=replacementPhone?'starting':'not_requested',codeRequestedAt=0;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
 const processedMessages=new Map();
 const publishedFreightTexts=new Map(),inFlightFreightTexts=new Set();
@@ -362,19 +367,39 @@ async function publishRequestedChannelPost(sock){
  }
 }
 
-async function connect(){
- if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
- const {state,saveCreds}=await useMultiFileAuthState(dir);
+async function connect(authDir=dir,candidate=false){
+ if(reconnectTimers.has(authDir)){clearTimeout(reconnectTimers.get(authDir));reconnectTimers.delete(authDir);}
+ const {state,saveCreds}=await useMultiFileAuthState(authDir);
  const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
- activeSocket=sock;
+ if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
-   if(nextQR){qr=nextQR;status='scan';}
-   if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite||g.id==='120363431703780865@g.us');if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
-   if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;console.warn('WhatsApp disconnected',code);if(activeSocket===sock&&code!==DisconnectReason.loggedOut&&!reconnectTimer){reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect().catch(e=>console.error('Reconnect error',String(e)));},7000);}}
+   if(nextQR){if(candidate){replacementQr=nextQR;replacementStatus='scan';}else{qr=nextQR;status='scan';}}
+   if(connection==='open'){
+    if(candidate){
+      const linked=String(sock.user?.id||'').split('@')[0].split(':')[0];
+      if(linked!==replacementPhone){replacementStatus='wrong_number';replacementQr='';replacementCode='';pendingSocket=null;sock.end(new Error('Unexpected account'));return;}
+      const previous=activeSocket;
+      activeSocket=sock;pendingSocket=sock;replacementStatus='connected';replacementQr='';replacementCode='';
+      resolvedChannelJid='';groupCount=null;monitoredGroupCount=null;
+      if(previous&&previous!==sock)previous.end(new Error('Account replaced by owner'));
+      console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
+    }
+    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite||g.id==='120363431703780865@g.us');if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
+   if(connection==='close'){
+    const code=lastDisconnect?.error?.output?.statusCode;
+    const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
+    if(selected){qr='';status='disconnected';}
+    if(waiting){replacementQr='';replacementCode='';replacementStatus=code===DisconnectReason.loggedOut?'logged_out':'reconnecting';}
+    console.warn('WhatsApp disconnected',code);
+    if((selected||waiting)&&code!==DisconnectReason.loggedOut&&!reconnectTimers.has(authDir)){
+      reconnectTimers.set(authDir,setTimeout(()=>{reconnectTimers.delete(authDir);connect(authDir,candidate).catch(e=>console.error('Reconnect error',String(e)));},7000));
+    }
+   }
  });
  // Read freight advertisements from joined groups; never message individuals.
  sock.ev.on('messages.upsert',async({messages,type})=>{
+   if(activeSocket!==sock)return;
    if(type!=='notify'&&type!=='append')return;
    for(const m of messages){
      let freightKey=null;
@@ -431,16 +456,45 @@ async function connect(){
  });
  // No automatic private or group replies.
 }
-connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
+async function startBot(){
+ if(!replacementDir){await connect();return;}
+ const {state}=await useMultiFileAuthState(replacementDir);
+ const savedPhone=String(state.creds.me?.id||'').split('@')[0].split(':')[0];
+ if(!state.creds.registered||savedPhone!==replacementPhone)await connect();
+ await connect(replacementDir,true);
+}
+startBot().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'supabase-connection-fix-20261009',ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname.startsWith('/pair-new')){
+  res.setHeader('Cache-Control','no-store');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
+  const access=process.env.PAIRING_MIGRATION_TOKEN;
+  if(!access||u.searchParams.get('token')!==access||Date.now()>Number(process.env.PAIRING_MIGRATION_EXPIRES||0)){res.writeHead(403);res.end('Pairing link expired or invalid');return;}
+  if(!replacementPhone){res.writeHead(409);res.end('No replacement requested');return;}
+  if(req.method==='POST'){
+   if(!pendingSocket||!replacementQr||replacementStatus==='connected'){res.writeHead(409);res.end('Pairing is not ready');return;}
+   if(Date.now()-codeRequestedAt<60000){res.writeHead(429);res.end('Please wait before requesting another code');return;}
+   codeRequestedAt=Date.now();replacementCode='';
+   try{const code=String(await pendingSocket.requestPairingCode(replacementPhone)).replace(/[^A-Z0-9]/gi,'').toUpperCase();if(code.length!==8)throw new Error('Invalid pairing code');replacementCode=code;replacementStatus='code_ready';}
+   catch{res.writeHead(502);res.end('Could not request pairing code; use QR or retry later');return;}
+   res.writeHead(303,{Location:'/pair-new?token='+encodeURIComponent(access)});res.end();return;
+  }
+  if(u.pathname==='/pair-new/status'){res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({status:replacementStatus,phone:replacementPhone,code:replacementCode,qrAvailable:!!replacementQr}));return;}
+  if(u.pathname==='/pair-new/qr'){if(!replacementQr||replacementCode){res.writeHead(409);res.end('QR unavailable');return;}res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(replacementQr,{type:'svg'}));return;}
+  const pairingUrl='/pair-new?token='+encodeURIComponent(access);
+  const stateText=({starting:'جارٍ تجهيز الربط',scan:'جاهز لمسح الرمز',code_ready:'أدخل الكود في واتساب',connected:'تم ربط الرقم الجديد وإيقاف اتصال الرقم السابق',wrong_number:'تم مسح الرمز من رقم مختلف؛ لم يتم تفعيل الاستبدال',reconnecting:'جارٍ الاتصال',logged_out:'انتهت جلسة الربط'})[replacementStatus]||'جارٍ التجهيز';
+  res.setHeader('Content-Security-Policy',"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'");
+  res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
+  res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
+ }
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
- res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'supabase-connection-fix-20261009',ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
 
