@@ -7,7 +7,7 @@ await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 async function connect(){
  const {state,saveCreds}=await useMultiFileAuthState(dir);
- const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false});
+ const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,logger:{level:'silent',trace(){},debug(){},info(){},warn(){},error(){},fatal(){},child(){return this;}},getMessage:async()=>undefined});
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){qr=nextQR;status='scan';}
