@@ -20,7 +20,7 @@ const trailers                   = [
   [/(?:براد|برادات|ثلاجه|ثلاجة|reefer)/iu,"براد"],
   [/(?:بوكس\s*مبرد)/u,"بوكس مبرد"],
   [/(?:ستاره|ستارة|ستاير|ستائر|اورفلية\s*ستارة)/u,"ستارة"],
-  [/(?:سطحه|سطحة|سطحات|سطحيه|سطحية|flatbed)/iu,"سطحة"],
+  [/(?:سطحه|سطحة|سطحا|سطحات|سطحيه|سطحية|flatbed)/iu,"سطحة"],
   [/(?:كشف\s*جنب)/u,"كشف جنب"],
   [/(?:جوانب\s*الماني|جوانب\s*ألماني)/u,"جوانب ألماني"],
   [/(?:جوانب\s*عاليه|جوانب\s*عالية)/u,"جوانب عالية"],
@@ -87,12 +87,16 @@ add("اليمن",["الوديعة اليمن","شحن اليمن","صرفيت","
 
 add("سوريا",["باب الهوا","باب الهوى","نصيب","نصبيض"]);
 add("سوريا",["قحطانيه","قحطانية"]);
+add("سوريا",["باب الهوه","اليعروبيه","اليعربيه","سوق الصالحية بدير الزور"]);
 trailers.unshift([/(?:ستارتين)/u,"ستارة"],[/(?:سطحتين)/u,"سطحة"]);
 function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){return ({'باب الهوا':'باب الهوى','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق'})[city]||city;}
+function canonicalPlace(city){return ({'باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','جده':'جدة'})[city]||city;}
+// Expand the contracted destination prefix only for geographical matching:
+// للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
+function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
 const cargoWords=["قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
@@ -163,7 +167,7 @@ function explicitRoute(text){
 }
 function route(text){
  const explicit=explicitRoute(text);if(explicit)return explicit;
- const n=normalize(text), hits=[];
+ const n=geographyText(text), hits=[];
  for(const [city] of cityCountry){let pos=n.indexOf(city);while(pos>=0){
   if(placeBoundary(n,pos)&&(pos+city.length===n.length||!/[\p{L}]/u.test(n[pos+city.length])))hits.push({idx:pos,city});
   pos=n.indexOf(city,pos+city.length);
@@ -248,6 +252,9 @@ function weight(text){const m=normalize(text).match(/(?:وزن\s*)?(\d+(?:[.,]\d
 function count(text       ){
   const n=normalize(text);
   if(/(?:برادين|سيارتين|شاحنتين|سطحتين|ستارتين|قاطرتين|مقطورتين|تريلتين|قلابين|لوبدين)/u.test(n)) return 2;
+  const words={تلت:3,ثلاث:3,ثلاثة:3,تلات:3,تلاتة:3,اربع:4,اربعة:4,خمس:5,خمسة:5,ست:6,ستة:6,سبع:7,سبعة:7,ثمان:8,ثمانية:8,تسع:9,تسعة:9,عشر:10,عشرة:10};
+  const wordCount=n.match(/(?:^|[^\p{L}])(تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?|ستة?|سبعة?|ثمانية|ثمان|تسعة?|عشرة?)\s+(?:برادات|سيارات|شاحنات|سطحات|ستائر|ستاير|قلابات|تريلات)(?=$|[^\p{L}])/u);
+  if(wordCount)return words[wordCount[1]];
   const pats=[
     /(?:براد|ستارة|ستاره|شاحنة|سيارة|تريلا|سطحة)\s*(?:عدد)\s*(\d{1,3})(?!\d)/u,
     /(?:مطلوب|نحتاج|يلزم)\s*(?:عدد\s*)?(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u,
@@ -256,9 +263,9 @@ function count(text       ){
   for(const rx of pats){const m=n.match(rx);if(m)return Math.max(1,Math.min(100,Number(m[1])));}
   return 1;
 }
-function cargo(text       ){const n=normalize(text);for(const w of cargoWords)if(n.includes(normalize(w)))return w;return "حمولة غير محددة";}
+function cargo(text){const n=normalize(text);for(const w of ['اسفنج','كريمة',...cargoWords])if(new RegExp('(?:^|[^\\p{L}])(?:ال)?'+normalize(w)+'(?=$|[^\\p{L}])','u').test(n))return w;return "حمولة غير محددة";}
 function trainedFreightRoute(raw       ,available        ){
- const n=normalize(raw);
+ const n=geographyText(raw);
  const matches      =[];
  for(const [city,country] of cityCountry){
   let start=0;
@@ -289,8 +296,8 @@ function availabilityRoute(raw       ){
 function parse(rawText       ,fallbackContact            =null){
   const text=String(rawText||"").trim();
   const n=normalize(text);
-  const availabilityHint=/(?:فاضي|فاضية|فارغ|متاح|متوفر|موجود|جاهز|جاهزة|ستارتين|برادين|سطحتين|شاحنتين|سيارتين|(?:في|عندي|يوجد)\s+(?:\d+\s*)?(?:ستارة|ستاره|ستائر|سيارة|سيارات|شاحنة|براد|سطحة))/u.test(n);
-  const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا)?|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:\d+\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
+  const availabilityHint=/(?:فاضي|فاضية|فارغ|متاح|متوفر|موجود|جاهز|جاهزة|(?:في|عندي|يوجد)\s+(?:\d+\s*)?(?:ستارة|ستاره|ستائر|سيارة|سيارات|شاحنة|براد|سطحة))/u.test(n);
+  const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا|ني)?|لازم(?:نا|ني)|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:(?:\d+|تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?)\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
   const truckAvailable=!vehicleRequest&&(availabilityHint||/(?:طالع|طالعه|جاهز|جاهزه)\s+(?:من|في|بال|بعد)/u.test(n));
   const rt=route(text)||(truckAvailable?trainedFreightRoute(text,true):null);
   const rawPh=phone(text);
@@ -301,7 +308,7 @@ function parse(rawText       ,fallbackContact            =null){
   let fc=rt?(rt.from_country||inferCountry(rt.from_city)):null;
   let toc=rt?(rt.to_country||inferCountry(rt.to_city)):null;
   const ph=normalizeContact(rawPh,fallbackContact,fc||toc);
-  const wanted=/(?:بدنا|بدي|نبي|عايزين|عاوزين|سياره\s+تحمل|سيارة\s+تحمل|مطلوب|مطلوبه|مطلوبة|مطلوبين|نحتاج|يلزم|يلزمنا|يلزمنه|لازمنا|لزمنا|بحاجه|بحاجة|نريد|تحميل|حموله|حمولة|حمل|تنقل|نقل|برادات\s+من|براد\s+من)/u.test(n);
+  const wanted=vehicleRequest||/(?:بدنا|بدي|نبي|عايزين|عاوزين|سياره\s+تحمل|سيارة\s+تحمل|مطلوب|مطلوبه|مطلوبة|مطلوبين|نحتاج|يلزم|يلزمنا|يلزمنه|لازمنا|لازمني|لزمنا|بحاجه|بحاجة|نريد|تحميل|حموله|حمولة|حمل|تنقل|نقل|برادات\s+من|براد\s+من)/u.test(n);
   const hasVehicle=Boolean(tr)||/(?:براد|برادات|سيارات|سياره|سيارة|شاحنات|شاحنه|شاحنة|تريلا|قاطره|قاطرة|مقطوره|مقطورة|ستارتين|ستارة|ستاره|برادين|سطحتين)/u.test(n);
   let confidence=0;
   if(rt)confidence+=0.42;
