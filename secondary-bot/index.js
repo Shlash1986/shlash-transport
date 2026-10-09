@@ -86,6 +86,13 @@ add("البحرين",["جسر الملك فهد","ميناء خليفة بن س�
 add("اليمن",["الوديعة اليمن","شحن اليمن","صرفيت","ميناء عدن","ميناء الحديدة","ميناء المكلا","سيئون","مأرب","تعز","إب","صنعاء","عدن"]);
 
 add("سوريا",["باب الهوا","باب الهوى","نصيب","نصبيض"]);
+add("سوريا",["قحطانيه","قحطانية"]);
+trailers.unshift([/(?:ستارتين)/u,"ستارة"],[/(?:سطحتين)/u,"سطحة"]);
+function placeBoundary(text,index){
+ if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
+ return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
+}
+function canonicalPlace(city){return ({'باب الهوا':'باب الهوى','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق'})[city]||city;}
 const cargoWords=["قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
@@ -126,14 +133,14 @@ function colloquialCottonRoute(text       ){
 function route(text){
  const n=normalize(text), hits=[];
  for(const [city] of cityCountry){let pos=n.indexOf(city);while(pos>=0){
-  if((pos===0||!/[\p{L}]/u.test(n[pos-1]))&&(pos+city.length===n.length||!/[\p{L}]/u.test(n[pos+city.length])))hits.push({idx:pos,city});
+  if(placeBoundary(n,pos)&&(pos+city.length===n.length||!/[\p{L}]/u.test(n[pos+city.length])))hits.push({idx:pos,city});
   pos=n.indexOf(city,pos+city.length);
  }}
  hits.sort((a,b)=>a.idx-b.idx||b.city.length-a.city.length);
  const picked=[];for(const h of hits){if(!picked.some(p=>h.idx>=p.idx&&h.idx<p.idx+p.city.length))picked.push(h);}
  const unique=picked.filter((h,i)=>picked.findIndex(p=>p.city===h.city)===i);
  if(unique.length!==2)return null;
- return {from_city:unique[0].city,to_city:unique[1].city};
+ return {from_city:canonicalPlace(unique[0].city),to_city:canonicalPlace(unique[1].city)};
 }
 function phone(text       ){const m=normalize(text).match(/(?:\+|00)?\d[\d\s-]{7,18}\d/g)||[];for(const raw of m){const compact=raw.replace(/[\s-]/g,"");const digits=compact.replace(/^\+/,"").replace(/^00/,"");if(digits.length>=9&&digits.length<=15)return compact.startsWith("+")?compact:compact.startsWith("00")?"+"+compact.slice(2):compact;}return null;}
 function contactFromJid(jid=""){
@@ -185,11 +192,12 @@ function trailer(text       ){
   }
   return labels.length?labels.join(" أو "):null;
 }
-function weight(text       ){const m=normalize(text).match(/(?:وزن\s*)?(\d+(?:[.,]\d+)?)\s*(?:طن|تون)\b/u);return m?Number(m[1].replace(",",".")):null;}
+function weight(text){const m=normalize(text).match(/(?:وزن\s*)?(\d+(?:[.,]\d+)?)\s*(?:طن|طون|تون)(?=$|[^\p{L}])/u);return m?Number(m[1].replace(",",".")):null;}
 function count(text       ){
   const n=normalize(text);
   if(/(?:برادين|سيارتين|شاحنتين|سطحتين|ستارتين|قاطرتين|مقطورتين|تريلتين|قلابين|لوبدين)/u.test(n)) return 2;
   const pats=[
+    /(?:براد|ستارة|ستاره|شاحنة|سيارة|تريلا|سطحة)\s*(?:عدد)\s*(\d{1,3})(?!\d)/u,
     /(?:مطلوب|نحتاج|يلزم)\s*(?:عدد\s*)?(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u,
     /(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u
   ];
@@ -203,7 +211,7 @@ function trainedFreightRoute(raw       ,available        ){
  for(const [city,country] of cityCountry){
   let start=0;
   while(start<n.length){const i=n.indexOf(city,start);if(i<0)break;
-   const left=i===0||/[^\p{L}]/u.test(n[i-1]);const right=i+city.length===n.length||/[^\p{L}]/u.test(n[i+city.length]);
+   const left=placeBoundary(n,i);const right=i+city.length===n.length||/[^\p{L}]/u.test(n[i+city.length]);
    if(left&&right)matches.push({city,country,i,len:city.length});start=i+city.length;
   }
  }
@@ -212,8 +220,8 @@ function trainedFreightRoute(raw       ,available        ){
  for(const m of matches)if(!places.some(p=>m.i>=p.i&&m.i<p.i+p.len))places.push(m);
  if(!places.length)return null;
  const first=places[0],second=places.find(x=>x.i>first.i+first.len);
- if(second)return {from_city:first.city,to_city:second.city};
- if(available)return {from_city:first.city,to_city:"غير محدد"};
+ if(second)return {from_city:canonicalPlace(first.city),to_city:canonicalPlace(second.city)};
+ if(available)return {from_city:canonicalPlace(first.city),to_city:"غير محدد"};
  return null;
 }
 function availabilityRoute(raw       ){
@@ -230,7 +238,9 @@ function parse(rawText       ,fallbackContact            =null){
   const text=String(rawText||"").trim();
   const n=normalize(text);
   const availabilityHint=/(?:فاضي|فاضية|فارغ|متاح|متوفر|موجود|جاهز|جاهزة|ستارتين|برادين|سطحتين|شاحنتين|سيارتين|(?:في|عندي|يوجد)\s+(?:\d+\s*)?(?:ستارة|ستاره|ستائر|سيارة|سيارات|شاحنة|براد|سطحة))/u.test(n);
-  const rt=route(text)||(availabilityHint?trainedFreightRoute(text,true):null);
+  const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا)?|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:\d+\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
+  const truckAvailable=!vehicleRequest&&(availabilityHint||/(?:طالع|طالعه|جاهز|جاهزه)\s+(?:من|في|بال|بعد)/u.test(n));
+  const rt=route(text)||(truckAvailable?trainedFreightRoute(text,true):null);
   const rawPh=phone(text);
   const tr=trailer(text);
   const wt=weight(text);
@@ -240,7 +250,6 @@ function parse(rawText       ,fallbackContact            =null){
   let toc=rt?inferCountry(rt.to_city):null;
   const ph=normalizeContact(rawPh,fallbackContact,fc||toc);
   const wanted=/(?:بدنا|بدي|نبي|عايزين|عاوزين|سياره\s+تحمل|سيارة\s+تحمل|مطلوب|مطلوبه|مطلوبة|مطلوبين|نحتاج|يلزم|يلزمنا|يلزمنه|لازمنا|لزمنا|بحاجه|بحاجة|نريد|تحميل|حموله|حمولة|حمل|تنقل|نقل|برادات\s+من|براد\s+من)/u.test(n);
-  const truckAvailable=(availabilityHint || /(?:طالع|طالعه|جاهز|جاهزه)\s+(?:من|في|بال|بعد)/u.test(n)) && !/(?:مطلوب|يلزم|نحتاج|بدنا|بدي|نبي)\s*(?:\d+\s*)?(?:براد|سطحة|ستارة|شاحنة|سيارة)/u.test(n);
   const hasVehicle=Boolean(tr)||/(?:براد|برادات|سيارات|سياره|سيارة|شاحنات|شاحنه|شاحنة|تريلا|قاطره|قاطرة|مقطوره|مقطورة|ستارتين|ستارة|ستاره|برادين|سطحتين)/u.test(n);
   let confidence=0;
   if(rt)confidence+=0.42;
@@ -253,7 +262,7 @@ function parse(rawText       ,fallbackContact            =null){
   if(wanted)confidence+=0.06;
   confidence=Math.min(0.99,Number(confidence.toFixed(2)));
   const enoughFreightSignal=Boolean(tr||hasVehicle||cg!=="حمولة غير محددة");
-  const publishable=Boolean((truckAvailable||wanted)&&rt&&fc&&(toc||truckAvailable)&&ph&&(truckAvailable?confidence>=0.7:confidence>=0.75));
+  const publishable=Boolean(enoughFreightSignal&&(truckAvailable||wanted)&&rt&&fc&&(toc||truckAvailable)&&ph&&(truckAvailable?confidence>=0.7:confidence>=0.86));
   return {kind:truckAvailable?"truck_available":wanted?"load":"unknown",publishable,confidence,reason:publishable?null:truckAvailable?"truck_availability_incomplete":!wanted?"not_a_freight_request":!rt?"route_missing":!fc||!toc?"country_inference_missing":!ph?"contact_number_missing":!enoughFreightSignal?"freight_details_missing":"confidence_below_threshold",load:rt?{transport_scope:fc===toc?"local":"international",load_mode:"FTL",from_country:fc,from_city:rt.from_city,to_country:toc,to_city:rt.to_city==="غير محدد"?null:rt.to_city,cargo_type:cg,weight_tons:wt,required_trailer_type:tr||"غير محدد",trucks_required:tc,contact_phone:ph,contact_whatsapp:ph,posted_on_behalf:true,notes:text.slice(0,1200),status:"open",load_kind:"cargo",ad_duration_days:1,contact_visibility:"registered"}:null};
 }
 
@@ -261,6 +270,42 @@ import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysocke
 import QRCode from 'qrcode';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import http from 'node:http';
+// Restore the old runner's place learning, without importing its private replies
+// or guessing missing endpoints. Existing curated entries always win.
+let learnedPlaces=0,placeLearningStatus='pending';
+async function learnPlacesFromPlatform(){
+ if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY){placeLearningStatus='not_configured';return;}
+ const allowed=new Set([...cityCountry.values(),'مصر']);
+ const candidates=new Map();
+ try{
+  for(let offset=0;offset<2000;offset+=1000){
+   const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/loads?select=from_city,from_country,to_city,to_country&order=published_at.desc&limit=1000&offset='+offset,{signal:AbortSignal.timeout(10000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY}});
+   if(!response.ok)throw new Error('HTTP '+response.status);
+   const rows=await response.json();
+   if(!Array.isArray(rows))throw new Error('Invalid place response');
+   for(const row of rows)for(const [city,country] of [[row.from_city,row.from_country],[row.to_city,row.to_country]]){
+    const name=normalize(city||'');
+    if(!allowed.has(country)||name.length<3||name.length>45||!/^\p{L}[\p{L} ]+$/u.test(name)||/غير محدد|غير مذكور|حسب الاتصال|عدة مدن|جميع|محافظات|مطلوب|تحميل|حمول/u.test(name)||name.split(' ').length>5||cityCountry.has(name))continue;
+    if(!candidates.has(name))candidates.set(name,new Set());
+    candidates.get(name).add(country);
+   }
+   if(rows.length<1000)break;
+  }
+  for(const [city,countries] of candidates)if(countries.size===1){cityCountry.set(city,[...countries][0]);learnedPlaces++;}
+  placeLearningStatus='ready';
+  console.log('Legacy place learning restored',JSON.stringify({learnedPlaces,totalKnownPlaces:cityCountry.size}));
+ }catch(e){placeLearningStatus='failed';console.warn('Place learning unavailable; using curated dictionary',String(e));}
+}
+function getText(message){
+ let msg=message;
+ for(let i=0;i<8&&msg;i++){
+  const inner=msg.ephemeralMessage?.message||msg.viewOnceMessage?.message||msg.viewOnceMessageV2?.message||msg.viewOnceMessageV2Extension?.message||msg.documentWithCaptionMessage?.message;
+  if(!inner)break;
+  msg=inner;
+ }
+ return String(msg?.conversation||msg?.extendedTextMessage?.text||msg?.imageMessage?.caption||msg?.videoMessage?.caption||msg?.documentMessage?.caption||'').trim();
+}
+await learnPlacesFromPlatform();
 const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
 let qr='',status='starting';
@@ -269,6 +314,7 @@ let groupCount=null,groupCheckError='';
 let activeSocket=null,reconnectTimer=null;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
 const processedMessages=new Map();
+const publishedFreightTexts=new Map(),inFlightFreightTexts=new Set();
 const recentMessages=new Map();
 // Groups 1–9 excluded by the owner: exchange rates and personal business, not freight.
 const EXCLUDED_GROUPS=new Set(["120363285533629337@g.us","120363032467180231@g.us","120363390071970492@g.us","120363246703383152@g.us","120363430110878767@g.us","120363165708973439@g.us","120363258441959550@g.us","120363306190092623@g.us","120363433294574615@g.us"]);
@@ -318,6 +364,7 @@ async function connect(){
  sock.ev.on('messages.upsert',async({messages,type})=>{
    if(type!=='notify'&&type!=='append')return;
    for(const m of messages){
+     let freightKey=null;
      try{
        const jid=String(m.key?.remoteJid||'');
        if(!jid.endsWith('@g.us')||m.key?.fromMe||EXCLUDED_GROUPS.has(jid))continue;
@@ -329,15 +376,23 @@ async function connect(){
        if(processedMessages.has(cacheKey))continue;
        receivedGroupMessages++;lastReceivedAt=new Date().toISOString();
        console.log('Group message received',JSON.stringify({group:jid,id:m.key.id}));
-       const msg=m.message?.ephemeralMessage?.message||m.message||{};
-       const text=String(msg.conversation||msg.extendedTextMessage?.text||msg.imageMessage?.caption||'').trim();
+       const text=getText(m.message);
        if(!text)continue;
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
        const sender=m.key.participantAlt||m.key.participant||'';
        const finalParsed=parse(text,contactFromJid(sender));
-       if(!finalParsed.publishable||(finalParsed.kind==='load'&&finalParsed.confidence<0.86)){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));continue;}
-       const isTruck=finalParsed.kind==='truck_available';
-       const body={p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:jid,p_message_id:m.key.id,p_sender_hash:createHash('sha256').update(String(sender)).digest('hex').slice(0,24),p_text:text.slice(0,4000),p_received_at:new Date(Number(m.messageTimestamp||Date.now()/1000)*1000).toISOString(),p_parsed:finalParsed,p_confidence:finalParsed.confidence,p_publish:true};
+       const shouldPublish=finalParsed.publishable&&(finalParsed.kind!=='load'||finalParsed.confidence>=0.86);
+       if(!shouldPublish){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
+       if(shouldPublish){
+         const key=createHash('sha256').update(normalize(text).replace(/[\p{P}\p{S}\s]+/gu,' ').trim()+'|'+finalParsed.load.contact_phone).digest('hex');
+         for(const [k,ts] of publishedFreightTexts)if(Date.now()-ts>24*60*60*1000)publishedFreightTexts.delete(k);
+         if(publishedFreightTexts.has(key)||inFlightFreightTexts.has(key)){console.log('Repeated forwarded freight skipped');continue;}
+         freightKey=key;inFlightFreightTexts.add(key);
+       }
+       // Retain rejected freight for diagnosis via the existing authenticated RPC;
+       // never publish it or send a clarification message to the individual.
+       const isTruck=shouldPublish&&finalParsed.kind==='truck_available';
+       const body={p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:jid,p_message_id:m.key.id,p_sender_hash:createHash('sha256').update(String(sender)).digest('hex').slice(0,24),p_text:text.slice(0,4000),p_received_at:new Date(Number(m.messageTimestamp||Date.now()/1000)*1000).toISOString(),p_parsed:finalParsed,p_confidence:finalParsed.confidence,p_publish:shouldPublish};
        if(isTruck)delete body.p_publish;
        const rpc=isTruck?'publish_whatsapp_truck_available':'ingest_whatsapp_pilot';
        const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/'+rpc,{method:'POST',signal:AbortSignal.timeout(20000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},body:JSON.stringify(body)});
@@ -345,7 +400,9 @@ async function connect(){
        if(!response.ok){lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
        const outcome=JSON.parse(result);
        console.log('Freight ingest result',JSON.stringify({id:m.key.id,...outcome}));
-       if(outcome.published!==true||outcome.duplicate===true)continue;
+       if(!shouldPublish||outcome.duplicate===true){processedMessages.set(cacheKey,Date.now());if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);continue;}
+       if(outcome.published!==true)continue;
+       if(freightKey){publishedFreightTexts.set(freightKey,Date.now());if(publishedFreightTexts.size>5000)publishedFreightTexts.delete(publishedFreightTexts.keys().next().value);}
        processedMessages.set(cacheKey,Date.now());
        if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);
        if(isTruck)publishedTrucks++;else publishedLoads++;
@@ -356,6 +413,7 @@ async function connect(){
          if(sent?.key?.id){publishedChannel++;console.log('Channel publication sent',JSON.stringify({sourceId:m.key.id,channel,messageId:sent.key.id}));}
        }else{lastPublishError='Channel unresolved';console.error(lastPublishError);}
      }catch(e){lastPublishError=String(e);console.error('Freight processing error',String(e));}
+     finally{if(freightKey)inFlightFreightTexts.delete(freightKey);}
    }
  });
  // No automatic private or group replies.
@@ -363,11 +421,12 @@ async function connect(){
 connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'manual-channel-post-20261009',manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'legacy-settings-restored-20261009',learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
- res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'manual-channel-post-20261009',manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'legacy-settings-restored-20261009',learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
