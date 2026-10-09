@@ -2,7 +2,7 @@ import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysocke
 import QRCode from 'qrcode';
 import {mkdir} from 'node:fs/promises';
 import http from 'node:http';
-const dir='/data/wa-session-secondary';
+const dir='/data/wa-session-secondary-repair-20261009';
 await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 async function connect(){
