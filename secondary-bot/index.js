@@ -1,3 +1,4 @@
+import {extractFreightAd} from './ai-extractor.js';
 import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import {mkdir} from 'node:fs/promises';
@@ -32,8 +33,19 @@ async function connect(){
        const phone=phoneMatch[0].replace(/[^\\d]/g,'').replace(/^00/,'');
        const route=text.match(/(?:من|مِن)\\s+([^\\n،,]+?)\\s+(?:إلى|الى|لـ|ل)\\s+([^\\n،,]+)/);
        const parsed={kind:'load',confidence:route?0.87:0.65,from_city:route?.[1]?.trim()||null,to_city:route?.[2]?.trim()||null,contact_phone:'+'+phone,contact_whatsapp:'+'+phone,raw_text:text};
-       if(!route){console.log('Freight skipped: route unclear',m.key.id);continue;}
-       const body={p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:jid,p_message_id:m.key.id,p_sender_hash:'secondary-'+String(m.key.participant||'').slice(-20),p_text:text,p_received_at:new Date(Number(m.messageTimestamp||Date.now()/1000)*1000).toISOString(),p_parsed:parsed,p_confidence:parsed.confidence,p_publish:true};
+       // AI analyzes the same received group text when configured. No WhatsApp session changes.
+       let finalParsed=parsed;
+       if(process.env.OPENAI_API_KEY){
+         try{
+           const ai=await extractFreightAd(text);
+           if(ai.publish){
+             finalParsed={...parsed,kind:ai.kind,confidence:ai.confidence,from_city:ai.from_city,to_city:ai.to_city,vehicle_type:ai.vehicle_type||null,contact_phone:ai.contact_phone,contact_whatsapp:ai.contact_phone,raw_text:text};
+             console.log('AI freight extracted',m.key.id);
+           }else{console.log('AI freight skipped',m.key.id,ai.reason||'unclear');continue;}
+         }catch(error){console.error('AI extraction failed',String(error));}
+       }
+       if(!finalParsed.from_city||!finalParsed.to_city){console.log('Freight skipped: route unclear',m.key.id);continue;}
+       const body={p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:jid,p_message_id:m.key.id,p_sender_hash:'secondary-'+String(m.key.participant||'').slice(-20),p_text:text,p_received_at:new Date(Number(m.messageTimestamp||Date.now()/1000)*1000).toISOString(),p_parsed:finalParsed,p_confidence:finalParsed.confidence,p_publish:true};
        const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/ingest_whatsapp_pilot',{method:'POST',headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},body:JSON.stringify(body)});
        const result=await response.text();
        if(!response.ok){console.error('Ingest failed',response.status,result.slice(0,300));continue;}
