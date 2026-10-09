@@ -6,7 +6,7 @@ const filename=process.argv[2]||'index.js';
 let source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace("connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
 const callbacks={},requests=[],sent=[];
 let mode='success';
-const sock={ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
+const sock={user:{id:'4368120528715:4@s.whatsapp.net'},ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
 const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
  const body=JSON.parse(opts.body);
@@ -42,4 +42,7 @@ mode='duplicate';await upsert([message('DUPE001',complete[2])]);assert.equal(sen
 mode='error';await upsert([message('ERROR001',complete[3])]);assert.equal(sent.length,2);
 mode='success';await upsert([message('ERROR001',complete[3])]);assert.equal(sent.length,3);
 const video=message('VIDEO001','');video.message={videoMessage:{caption:complete[1]}};await upsert([video]);assert.equal(sent.length,4);
+const own=message('OWNAD001','مطلوب براد من دمشق إلى دبي');own.key.fromMe=true;own.key.participant='12345678901234@lid';await upsert([own]);assert.equal(sent.length,5);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,'+4368120528715');
+const ownExcluded=message('OWNEXCLUDED',complete[0],'120363285533629337@g.us');ownExcluded.key.fromMe=true;await upsert([ownExcluded]);assert.equal(sent.length,5);
+const privateOwn=message('OWNPRIVATE',complete[0],'12345678901234@lid');privateOwn.key.fromMe=true;await upsert([privateOwn]);assert.equal(sent.length,5);
 console.log('PASS: restored place learning, complete routes, dual request classification, weight/count, missing-origin rejection, captions, private/excluded groups, RPC and channel gating');
