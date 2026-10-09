@@ -278,8 +278,10 @@ async function learnPlacesFromPlatform(){
  const allowed=new Set([...cityCountry.values(),'مصر']);
  const candidates=new Map();
  try{
-  for(let offset=0;offset<2000;offset+=1000){
-   const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/loads?select=from_city,from_country,to_city,to_country&order=published_at.desc&limit=1000&offset='+offset,{signal:AbortSignal.timeout(10000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY}});
+  {
+   // Use the site's permitted public feed, selecting only geography fields.
+   // Direct access to loads is restricted to owners and admins.
+   const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/get_load_feed_v6?limit_count=500&select=from_city,from_country,to_city,to_country',{signal:AbortSignal.timeout(10000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY}});
    if(!response.ok)throw new Error('HTTP '+response.status);
    const rows=await response.json();
    if(!Array.isArray(rows))throw new Error('Invalid place response');
@@ -289,7 +291,6 @@ async function learnPlacesFromPlatform(){
     if(!candidates.has(name))candidates.set(name,new Set());
     candidates.get(name).add(country);
    }
-   if(rows.length<1000)break;
   }
   for(const [city,countries] of candidates)if(countries.size===1){cityCountry.set(city,[...countries][0]);learnedPlaces++;}
   placeLearningStatus='ready';
