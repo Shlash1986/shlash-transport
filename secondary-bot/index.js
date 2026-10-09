@@ -144,11 +144,31 @@ function route(text){
 }
 function phone(text       ){const m=normalize(text).match(/(?:\+|00)?\d[\d\s-]{7,18}\d/g)||[];for(const raw of m){const compact=raw.replace(/[\s-]/g,"");const digits=compact.replace(/^\+/,"").replace(/^00/,"");if(digits.length>=9&&digits.length<=15)return compact.startsWith("+")?compact:compact.startsWith("00")?"+"+compact.slice(2):compact;}return null;}
 function contactFromJid(jid=""){
-  const raw=String(jid||"");
-  if(!raw || raw.includes("@lid")) return null;
-  const user=(raw.split("@")[0]||"").split(":")[0].replace(/\D/g,"");
-  if(user.length<9 || user.length>15) return null;
-  return "+"+user;
+ const match=String(jid||'').match(/^(\d{9,15})(?::\d+)?@s\.whatsapp\.net$/);
+ return match?'+'+match[1]:null;
+}
+const senderGroupCache=new Map();
+function senderIdentity(jid){return String(jid||'').replace(/:\d+(?=@)/,'');}
+async function resolveSenderPhone(sock,m){
+ const key=m.key||{};
+ const direct=key.fromMe
+   ?[sock.user?.id,key.participantPn,key.participantAlt,key.participant,key.senderPn]
+   :[key.participantPn,key.participantAlt,key.participant,key.senderPn];
+ for(const value of direct){const phone=contactFromJid(value);if(phone)return phone;}
+ const senderIds=new Set([key.participant,key.participantLid,key.senderLid].filter(Boolean).map(senderIdentity));
+ if(!senderIds.size||!String(key.remoteJid||'').endsWith('@g.us'))return null;
+ let cached=senderGroupCache.get(key.remoteJid);
+ if(!cached||Date.now()-cached.at>5*60*1000){
+  const pending=Promise.resolve().then(()=>sock.groupMetadata(key.remoteJid)).then(meta=>meta?.participants||[]).catch(()=>[]);
+  cached={at:Date.now(),participants:pending};senderGroupCache.set(key.remoteJid,cached);
+  if(senderGroupCache.size>100)senderGroupCache.delete(senderGroupCache.keys().next().value);
+ }
+ for(const participant of await cached.participants){
+  if(![participant.id,participant.lid,participant.jid].some(id=>id&&senderIds.has(senderIdentity(id))))continue;
+  const phone=contactFromJid(participant.jid)||contactFromJid(participant.id);
+  if(phone)return phone;
+ }
+ return null;
 }
 function normalizeContact(raw            ,fallback            ,country            ){
   const dial    ={"السعودية":"966","سوريا":"963","الأردن":"962","العراق":"964","الإمارات":"971","لبنان":"961","عُمان":"968","الكويت":"965","قطر":"974","البحرين":"973","تركيا":"90","مصر":"20","اليمن":"967"};
@@ -421,7 +441,10 @@ async function connect(authDir=dir,candidate=false){
        if(!text)continue;
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
        const sender=m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
-       const finalParsed=parse(text,contactFromJid(sender));
+       const preliminary=parse(text,contactFromJid(sender));
+       const senderPhone=!phone(text)&&preliminary.kind!=='unknown'?await resolveSenderPhone(sock,m):null;
+       const finalParsed=senderPhone?parse(text,senderPhone):preliminary;
+       if(!phone(text)&&preliminary.kind!=='unknown')console.log('Sender contact resolution',JSON.stringify({id:m.key.id,resolved:!!finalParsed.load?.contact_phone}));
        const shouldPublish=finalParsed.publishable&&(finalParsed.kind!=='load'||finalParsed.confidence>=0.86);
        if(!shouldPublish){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
        if(shouldPublish){
@@ -497,6 +520,7 @@ http.createServer(async(req,res)=>{
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
 
