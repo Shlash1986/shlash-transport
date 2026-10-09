@@ -443,6 +443,36 @@ let monitoredGroupCount=null;
 function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
+let groupRefreshInFlight=false;
+async function refreshJoinedGroups(sock,joinRequested=false){
+ if(activeSocket!==sock||groupRefreshInFlight)return;
+ if(replacementPhone&&String(sock.user?.id||'').split('@')[0].split(':')[0]!==replacementPhone)return;
+ groupRefreshInFlight=true;
+ try{
+  let groups=await sock.groupFetchAllParticipating();
+  if(joinRequested){
+   const requested=['ENfU2aCppVa545mZW7W5Y3',...String(process.env.JOIN_GROUP_INVITES||'').split(',')].filter(code=>/^[A-Za-z0-9]{20,24}$/.test(code));
+   for(const code of [...new Set(requested)].slice(0,6)){
+    if(activeSocket!==sock)return;
+    if(code==='ENfU2aCppVa545mZW7W5Y3'&&groups['120363431703780865@g.us'])continue;
+    try{
+     const info=await sock.groupGetInviteInfo(code);
+     if(!info?.id?.endsWith('@g.us'))throw new Error('Invalid group metadata');
+     if(groups[info.id]){console.log('Requested group already joined',JSON.stringify({id:info.id,name:info.subject}));continue;}
+     if(EXCLUDED_GROUPS.has(info.id)){console.log('Requested group excluded',info.id);continue;}
+     await sock.groupAcceptInvite(code);
+     console.log('Requested group join submitted',JSON.stringify({id:info.id,name:info.subject}));
+    }catch(e){console.error('Requested group join failed',String(e));}
+   }
+   groups=await sock.groupFetchAllParticipating();
+  }
+  if(activeSocket!==sock)return;
+  groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;groupCheckError='';
+  console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));
+  console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));
+ }catch(e){groupCheckError=String(e);console.error('Group refresh failed',String(e));}
+ finally{groupRefreshInFlight=false;}
+}
 
 let manualPublication={status:'none'};
 async function publishRequestedChannelPost(sock){
@@ -476,6 +506,8 @@ async function connect(authDir=dir,candidate=false){
  const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
+ let groupRefreshTimer=null;
+ sock.ev.on('groups.upsert',()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},1000);});
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){if(candidate){replacementQr=nextQR;replacementStatus='scan';}else{qr=nextQR;status='scan';}}
    if(connection==='open'){
@@ -488,7 +520,7 @@ async function connect(authDir=dir,candidate=false){
       if(previous&&previous!==sock)previous.end(new Error('Account replaced by owner'));
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
-    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite||g.id==='120363431703780865@g.us');if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
+    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
