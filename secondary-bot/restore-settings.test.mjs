@@ -25,6 +25,22 @@ for(const text of complete){const p=parse(text);assert.equal(p.kind,'load',text)
 assert.equal(parse(complete[3]).load.weight_tons,3);
 assert.equal(parse(complete[3]).load.trucks_required,2);
 assert.equal(parse(complete[4]).load.to_city,'نصيب');
+const countryRoute=parse('مطلوب شاحنه من قطر الى الاردن','+436605565676');
+assert(countryRoute.publishable);
+assert.equal(countryRoute.load.from_country,'قطر');
+assert.equal(countryRoute.load.to_country,'الأردن');
+assert.equal(countryRoute.load.from_city,'غير محددة');
+assert.equal(countryRoute.load.to_city,'غير محددة');
+assert.equal(countryRoute.load.contact_phone,'+436605565676');
+for(const [text,from,to] of [
+ ['مطلوب شاحنة من قطر إلى دبي','قطر','الإمارات'],
+ ['مطلوب شاحنة من عدن في اليمن إلى دبي','اليمن','الإمارات'],
+ ['مطلوب شاحنة من دبي إلى الأردن الحمولة 3 طن','الإمارات','الأردن'],
+ ['مطلوب شاحنة من سلطنة عمان إلى قطر','عُمان','قطر']
+]){const parsed=parse(text,'+436605565676');assert(parsed.publishable,text);assert.equal(parsed.load.from_country,from);assert.equal(parsed.load.to_country,to);}
+assert.equal(parse('مطلوب شاحنه من قطر الى الاردن').publishable,false);
+assert.equal(parse('مطلوب شاحنه من قطر الى مكان مجهول','+436605565676').publishable,false);
+assert.equal(parse('مطلوب شاحنه من عدان الى دبي','+436605565676').publishable,false);
 for(const text of ['مطلوب ستارة عدد 2 الحمولة 3 طون عنصيب +905392142652','مطلوب ستارتين إلى نصيب +905392142652','سعر الدولار في دمشق وحلب 0982835244'])assert.equal(parse(text).publishable,false,text);
 const truck=parse('متوفر براد فاضي بسرمدا +963957910793');assert.equal(truck.kind,'truck_available');assert(truck.publishable);assert.equal(truck.load.to_city,null);
 assert.equal(getText({ephemeralMessage:{message:{documentWithCaptionMessage:{message:{documentMessage:{caption:'caption'}}}}}}),'caption');
@@ -50,4 +66,5 @@ const senderPn=message('SENDERPN001','مطلوب براد من حلب إلى د�
 const lid=message('METADATALID','مطلوب براد من حلب إلى دبي');lid.key.participant='99999999999999@lid';await upsert([lid]);assert.equal(sent.length,8);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,'+963955111222');
 const unknown=message('UNKNOWNLID','مطلوب براد من حلب إلى دبي');unknown.key.participant='77777777777777@lid';await upsert([unknown]);assert.equal(sent.length,8);assert.equal(requests.at(-1).body.p_publish,false);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,null);
 const explicit=message('EXPLICITPHONE','مطلوب براد من حلب إلى دبي +963955777666');explicit.key.participant='99999999999999@lid';await upsert([explicit]);assert.equal(sent.length,9);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,'+963955777666');
-console.log('PASS: restored place learning, complete routes, dual request classification, weight/count, missing-origin rejection, captions, private/excluded groups, RPC and channel gating');
+const countryMessage=message('COUNTRYROUTE','مطلوب شاحنه من قطر الى الاردن');countryMessage.key.participant='11111111111111@lid';countryMessage.key.participantPn='436605565676@s.whatsapp.net';await upsert([countryMessage]);assert.equal(sent.length,10);assert.equal(requests.at(-1).body.p_publish,true);assert.equal(requests.at(-1).body.p_parsed.load.to_city,'غير محددة');assert(sent.at(-1).payload.text.includes('+436605565676'));
+console.log('PASS: country and city routes, sender phone, restored place learning, dual request classification, weight/count, missing-origin rejection, captions, private/excluded groups, RPC and channel gating');
