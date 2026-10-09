@@ -305,7 +305,19 @@ function getText(message){
  }
  return String(msg?.conversation||msg?.extendedTextMessage?.text||msg?.imageMessage?.caption||msg?.videoMessage?.caption||msg?.documentMessage?.caption||'').trim();
 }
-await learnPlacesFromPlatform();
+let ingestConnectionStatus='pending';
+async function verifyIngestConnection(){
+ if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){ingestConnectionStatus='not_configured';return;}
+ try{
+  // The existing RPC validates credentials before invalid_text, and rejects
+  // an empty text before any INSERT. This probe cannot publish or store an ad.
+  const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/ingest_whatsapp_pilot',{method:'POST',signal:AbortSignal.timeout(10000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},body:JSON.stringify({p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:'120363431703780865@g.us',p_message_id:'connection-probe',p_sender_hash:'connection-probe',p_text:'',p_received_at:new Date().toISOString(),p_parsed:{publishable:false},p_confidence:0,p_publish:false})});
+  const result=await response.json();
+  ingestConnectionStatus=result.code==='P0001'&&result.message==='invalid_text'?'ready':result.message==='unauthorized'?'ingest_token_rejected':'gateway_or_rpc_error';
+  console.log('Ingest connection check',JSON.stringify({status:ingestConnectionStatus,httpStatus:response.status}));
+ }catch{ingestConnectionStatus='unavailable';console.warn('Ingest connection check unavailable');}
+}
+await Promise.all([learnPlacesFromPlatform(),verifyIngestConnection()]);
 const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
 let qr='',status='starting';
@@ -421,12 +433,12 @@ async function connect(){
 connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'legacy-settings-restored-20261009',learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'supabase-connection-fix-20261009',ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
- res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'legacy-settings-restored-20261009',learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'supabase-connection-fix-20261009',ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
 
 
