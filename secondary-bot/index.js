@@ -2,7 +2,7 @@ import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysocke
 import QRCode from 'qrcode';
 import {mkdir} from 'node:fs/promises';
 import http from 'node:http';
-const dir='/data/wa-session-secondary-repair-20261009';
+const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 let resolvedChannelJid='';
