@@ -17,7 +17,7 @@ const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,
  return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available'))})};
 }});
 context.isFreightCandidate=isFreightCandidate;context.getAIStatus=()=>({status:'not_configured'});context.extractFreightAd=async()=>{aiCalls++;return null;};
-await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,validateAIParse,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
+await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,validateAIParse,refreshJoinedGroups,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
 const {parse,getText}=context.api;
 assert.equal(context.api.getLearning().learnedPlaces,1);
 assert.equal(context.api.getLearning().placeLearningStatus,'ready');
@@ -120,3 +120,14 @@ for(const numbers of ['0506965053 0554807357 0173243922','+966 50 696 5053\n+966
 assert.equal(parse('مطلوب شاحنة من جدة إلى الأحساء\n+43 660 556 5676').load.contact_phone,'+436605565676');
 assert.equal(parse('مطلوب شاحنة من جدة إلى الأحساء\n+963 957 910 793').load.contact_phone,'+963957910793');
 console.log('PASS: separate contact numbers, formatted international numbers and Arabic digits');
+const joined={'120363431703780865@g.us':{id:'120363431703780865@g.us',subject:'TruckLink'}},acceptedInvites=[];
+context.process.env.JOIN_GROUP_INVITES='Hqve74Cep9hAfguV6ogj1g';
+sock.groupFetchAllParticipating=async()=>({...joined});
+sock.groupGetInviteInfo=async()=>({id:'120363412913039021@g.us',subject:'Freight group'});
+sock.groupAcceptInvite=async(code)=>{acceptedInvites.push(code);joined['120363412913039021@g.us']={id:'120363412913039021@g.us',subject:'Freight group'};};
+await context.api.refreshJoinedGroups(sock,true);assert.equal(acceptedInvites.length,1);
+await context.api.refreshJoinedGroups(sock,true);assert.equal(acceptedInvites.length,1);
+sock.groupGetInviteInfo=async()=>({id:'120363285533629337@g.us',subject:'Excluded'});
+await context.api.refreshJoinedGroups(sock,true);assert.equal(acceptedInvites.length,1);
+await context.api.refreshJoinedGroups({},true);assert.equal(acceptedInvites.length,1);
+console.log('PASS: authorized group joins, existing memberships, excluded groups and inactive socket guards');
