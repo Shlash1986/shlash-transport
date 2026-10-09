@@ -2,10 +2,12 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {isFreightCandidate} from './ai-runtime.mjs';
 const filename=process.argv[2]||'index.js';
 let source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace("connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'').replace("startBot().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
 const callbacks={},requests=[],sent=[];
 let mode='success';
+let aiCalls=0;
 const sock={user:{id:'4368120528715:4@s.whatsapp.net'},groupMetadata:async()=>({participants:[{id:'99999999999999@lid',lid:'99999999999999@lid',jid:'963955111222@s.whatsapp.net'},{id:'88888888888888@lid',jid:'963955999888@s.whatsapp.net'}]}),ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
 const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
@@ -14,7 +16,8 @@ const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,
  requests.push({url,body});
  return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available'))})};
 }});
-await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
+context.isFreightCandidate=isFreightCandidate;context.getAIStatus=()=>({status:'not_configured'});context.extractFreightAd=async()=>{aiCalls++;return null;};
+await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,validateAIParse,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
 const {parse,getText}=context.api;
 assert.equal(context.api.getLearning().learnedPlaces,1);
 assert.equal(context.api.getLearning().placeLearningStatus,'ready');
@@ -99,3 +102,15 @@ for(const [legacy,canonical] of Object.entries({'حفرالباطن':'حفر ا�
  const p=parse('مطلوب شاحنة من '+legacy+' إلى دبي','+966500000001');assert(p.publishable);assert.equal(p.load.from_city,canonical);assert.equal(p.load.from_country,'السعودية');
 }
 console.log('PASS: all eight screenshot advertisements, country/city routes, sender phone, availability, exclusions and platform/channel gating');
+const ad='شاحنة: حمص مكان الشحن؛ العقبة مكان التفريغ';
+const aiResult={publish:true,kind:'load',confidence:0.95,from_city:'حمص',from_country:'سوريا',to_city:'العقبة',to_country:'الأردن',vehicle_type:'شاحنة',contact_phone:'+19999999999'};
+assert.equal(context.api.validateAIParse(ad,aiResult,'+963900000001').load.contact_phone,'+963900000001');
+assert.equal(context.api.validateAIParse(ad,aiResult,null),null);
+assert.equal(context.api.validateAIParse(ad,{...aiResult,to_city:'دبي',to_country:'الإمارات'},'+963900000001'),null);
+assert.equal(context.api.validateAIParse(ad,{...aiResult,confidence:0.6},'+963900000001'),null);
+assert.equal(context.api.validateAIParse(ad,{...aiResult,from_country:'العراق'},'+963900000001'),null);
+context.extractFreightAd=async()=>aiResult;
+await upsert([message('AIRECOVERY1',ad)]);assert.equal(requests.at(-1).body.p_parsed.parser,'openai');assert.equal(sent.length,19);
+const aiBefore=aiCalls;context.extractFreightAd=async()=>{aiCalls++;return aiResult;};
+await upsert([message('AIPRIVATE',ad,'963900000001@s.whatsapp.net'),message('AIEXCLUDED',ad,'120363285533629337@g.us')]);assert.equal(aiCalls,aiBefore);assert.equal(sent.length,19);
+console.log('PASS: AI fallback integration, contact provenance, route grounding and private/excluded isolation');
