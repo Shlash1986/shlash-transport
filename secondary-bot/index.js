@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {extractFreightAd,getAIStatus,isFreightCandidate} from './ai-runtime.mjs';
 const ARABIC_DIGITS                        = { "٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9","۰":"0","۱":"1","۲":"2","۳":"3","۴":"4","۵":"5","۶":"6","۷":"7","۸":"8","۹":"9" };
 function normalize(input=""){ return String(input).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d).replace(/ـ/g,"").replace(/[إأآ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim(); }
 const cityCountry = new Map               ();
@@ -325,6 +326,26 @@ function parse(rawText       ,fallbackContact            =null){
   return {kind:truckAvailable?"truck_available":wanted?"load":"unknown",publishable,confidence,reason:publishable?null:truckAvailable?"truck_availability_incomplete":!wanted?"not_a_freight_request":!rt?"route_missing":!fc||!toc?"country_inference_missing":!ph?"contact_number_missing":!enoughFreightSignal?"freight_details_missing":"confidence_below_threshold",load:rt?{transport_scope:fc===toc?"local":"international",load_mode:"FTL",from_country:fc,from_city:rt.from_city,to_country:toc,to_city:rt.to_city==="غير محدد"?null:rt.to_city,cargo_type:cg,weight_tons:wt,required_trailer_type:tr||"غير محدد",trucks_required:tc,contact_phone:ph,contact_whatsapp:ph,posted_on_behalf:true,notes:text.slice(0,1200),status:"open",load_kind:"cargo",ad_duration_days:1,contact_visibility:"registered"}:null};
 }
 
+function validateAIParse(text,data,fallbackContact){
+ if(!data?.publish||!['load','truck_available'].includes(data.kind)||!Number.isFinite(data.confidence)||data.confidence<0.9||data.confidence>1)return null;
+ const n=geographyText(text),allowed=new Set([...cityCountry.values(),'مصر']);
+ const place=(raw,country)=>{
+  if(typeof raw!=='string'||!allowed.has(country))return null;
+  const city=normalize(raw);if(city.length<2||city.length>70||!/^\p{L}[\p{L}\s-]+$/u.test(city))return null;
+  let at=n.indexOf(city),mentioned=false;
+  while(at>=0){if(placeBoundary(n,at)&&(at+city.length===n.length||!/[\p{L}]/u.test(n[at+city.length]))){mentioned=true;break;}at=n.indexOf(city,at+city.length);}
+  if(!mentioned)return null;
+  const known=cityCountry.get(city);if(known&&known!==country)return null;
+  return {city:canonicalPlace(city),country};
+ };
+ const from=place(data.from_city,data.from_country),to=data.to_city==null?null:place(data.to_city,data.to_country);
+ if(!from||(data.kind==='load'&&!to)||(data.to_city!=null&&!to))return null;
+ const contact=normalizeContact(phone(text),fallbackContact,from.country);
+ if(!contact)return null;
+ const literal=(value)=>typeof value==='string'&&value.length<=80&&normalize(text).includes(normalize(value))?value:null;
+ const load={transport_scope:to&&from.country!==to.country?'international':'local',load_mode:'FTL',from_city:from.city,from_country:from.country,to_city:to?.city||null,to_country:to?.country||null,cargo_type:cargo(text)!=='حمولة غير محددة'?cargo(text):literal(data.cargo_type)||'حمولة غير محددة',required_trailer_type:trailer(text)||literal(data.vehicle_type)||'غير محدد',weight_tons:weight(text),trucks_required:count(text),contact_phone:contact,contact_whatsapp:contact,posted_on_behalf:true,notes:text.slice(0,1200),status:'open',load_kind:'cargo',ad_duration_days:1,contact_visibility:'registered'};
+ return {kind:data.kind,publishable:true,confidence:data.confidence,reason:null,load,parser:'openai'};
+}
 import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
@@ -481,8 +502,13 @@ async function connect(authDir=dir,candidate=false){
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
        const sender=m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
        const preliminary=parse(text,contactFromJid(sender));
-       const senderPhone=!phone(text)&&preliminary.kind!=='unknown'?await resolveSenderPhone(sock,m):null;
-       const finalParsed=senderPhone?parse(text,senderPhone):preliminary;
+       const senderPhone=!phone(text)&&(preliminary.kind!=='unknown'||isFreightCandidate(text))?await resolveSenderPhone(sock,m):null;
+       let finalParsed=senderPhone?parse(text,senderPhone):preliminary;
+       if(!finalParsed.publishable&&isFreightCandidate(text)&&(phone(text)||senderPhone||contactFromJid(sender))){
+         const ai=await extractFreightAd(text);
+         const recovered=validateAIParse(text,ai,senderPhone||contactFromJid(sender));
+         if(recovered){finalParsed=recovered;console.log('AI freight recovered',JSON.stringify({id:m.key.id,kind:recovered.kind}));}
+       }
        if(!phone(text)&&preliminary.kind!=='unknown')console.log('Sender contact resolution',JSON.stringify({id:m.key.id,resolved:!!(senderPhone||contactFromJid(sender))}));
        const shouldPublish=finalParsed.publishable&&(finalParsed.kind!=='load'||finalParsed.confidence>=0.86);
        if(!shouldPublish){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
@@ -552,7 +578,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'ai-fallback-20261010',ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
