@@ -23,3 +23,15 @@ export async function extractFreightAd(message, {apiKey=process.env.OPENAI_API_K
   if(!result.publish||!['load','truck'].includes(result.kind)||!result.from_city||!result.to_city||!result.contact_phone||Number(result.confidence)<0.8)return {...result,publish:false};
   return result;
 }
+
+export function extractFreightAdFree(message){
+ const text=String(message||'').trim();
+ if(!text||!/حمول|شحن|نقل|براد|ستارة|تريلا|قلاب|قلّاب|شاحنة|شاحنه|سيارة|سياره|تحميل|فارغ|فاضي|مطلوب|دينا|سطحة|سطحه|متوفر|متاح/i.test(text))return {publish:false,reason:'not_freight'};
+ const normalized=text.replace(/[\u064B-\u065F]/g,'').replace(/إ|أ|آ/g,'ا').replace(/ى/g,'ي').replace(/[🚛🚚📍➡️→]/g,' ');
+ const route=normalized.match(/(?:من|مِن)\s*[:：-]?\s*([^\n،,]+?)\s*(?:الى|لـ|باتجاه|متجه الى|->|—>|←)\s*([^\n،,]+)/i);
+ const phone=(text.match(/(?:\+|00)?(?:963|966|971|962|961|964|43)[\s-]?(?:\d[\s-]?){7,12}/)||[])[0];
+ const from_city=route?.[1]?.trim()||null,to_city=route?.[2]?.trim()||null;
+ const kind=/فاضي|فارغ|متاح|متوفر|جاهز|سياره موجود|شاحنه موجود/i.test(text)?'truck':'load';
+ const contact_phone=phone?'+'+phone.replace(/\D/g,'').replace(/^00/,''):null;
+ return {publish:!!(from_city&&to_city&&contact_phone),kind,from_city,to_city,contact_phone,confidence:from_city&&to_city&&contact_phone?0.82:0.4,raw_text:text};
+}
