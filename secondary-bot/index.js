@@ -14,7 +14,7 @@ async function connect(){
    if(connection==='open'){qr='';status='connected';}
    if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;if(code!==DisconnectReason.loggedOut)setTimeout(connect,5000);}
  });
- // Pairing only. No private messages, group reading or outgoing messages.
+ // Group ingestion will be enabled only after publishing credentials are verified. No private or outbound messages.
 }
 connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
 http.createServer(async(req,res)=>{
