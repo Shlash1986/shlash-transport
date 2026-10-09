@@ -336,8 +336,9 @@ let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=
 const processedMessages=new Map();
 const publishedFreightTexts=new Map(),inFlightFreightTexts=new Set();
 const recentMessages=new Map();
-// Groups 1–9 excluded by the owner: exchange rates and personal business, not freight.
-const EXCLUDED_GROUPS=new Set(["120363285533629337@g.us","120363032467180231@g.us","120363390071970492@g.us","120363246703383152@g.us","120363430110878767@g.us","120363165708973439@g.us","120363258441959550@g.us","120363306190092623@g.us","120363433294574615@g.us"]);
+// Owner exclusions: original groups 1–9 plus replacement-account groups
+// 1,2,3,5,6,7,10,13,15,17,22,27 from the verified 31-group list.
+const EXCLUDED_GROUPS=new Set(["120363285533629337@g.us","120363032467180231@g.us","120363390071970492@g.us","120363246703383152@g.us","120363430110878767@g.us","120363165708973439@g.us","120363258441959550@g.us","120363306190092623@g.us","120363433294574615@g.us","120363344974964509@g.us","120363423411014709@g.us","120363404559410103@g.us","120363404408158364@g.us","120363412699593606@g.us","4915780883324-1493381833@g.us","120363409325566982@g.us","120363364912181752@g.us","120363406171014799@g.us","120363408358449149@g.us","120363425579086719@g.us","905523903152-1583927147@g.us"]);
 let monitoredGroupCount=null;
 function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
