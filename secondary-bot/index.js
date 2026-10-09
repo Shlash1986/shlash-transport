@@ -8,21 +8,28 @@ await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
+let activeSocket=null,reconnectTimer=null;
+const recentMessages=new Map();
+function rememberMessage(m){const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
+
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
 async function connect(){
+ if(reconnectTimer){clearTimeout(reconnectTimer);reconnectTimer=null;}
  const {state,saveCreds}=await useMultiFileAuthState(dir);
- const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,getMessage:async()=>undefined});
+ const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
+ activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){qr=nextQR;status='scan';}
    if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite);if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
-   if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;if(code!==DisconnectReason.loggedOut)setTimeout(connect,5000);}
+   if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;console.warn('WhatsApp disconnected',code);if(activeSocket===sock&&code!==DisconnectReason.loggedOut&&!reconnectTimer){reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect().catch(e=>console.error('Reconnect error',String(e)));},7000);}}
  });
  // Read freight advertisements from joined groups; never message individuals.
  sock.ev.on('messages.upsert',async({messages,type})=>{
    if(type!=='notify')return;
    for(const m of messages){
      try{
+       rememberMessage(m);
        const jid=String(m.key?.remoteJid||'');
        if(!jid.endsWith('@g.us')||m.key?.fromMe)continue;
        const msg=m.message?.ephemeralMessage?.message||m.message||{};
