@@ -95,4 +95,7 @@ assert.equal(parse('برادين من باب الهوى على جابر','+96395
 assert.equal(parse('مطلوب شاحنة موديل 2014 تكون منافيخ عمامي خلفي الي عندو يخبرنه الله يرزقك الجميع','+963955111222').publishable,false);
 assert.equal(parse('الله يرزقك الجميع').load,null);
 assert.equal(getText({protocolMessage:{type:0}}),'');
+for(const [legacy,canonical] of Object.entries({'حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})){
+ const p=parse('مطلوب شاحنة من '+legacy+' إلى دبي','+966500000001');assert(p.publishable);assert.equal(p.load.from_city,canonical);assert.equal(p.load.from_country,'السعودية');
+}
 console.log('PASS: all eight screenshot advertisements, country/city routes, sender phone, availability, exclusions and platform/channel gating');
