@@ -67,4 +67,32 @@ const lid=message('METADATALID','مطلوب براد من حلب إلى دبي')
 const unknown=message('UNKNOWNLID','مطلوب براد من حلب إلى دبي');unknown.key.participant='77777777777777@lid';await upsert([unknown]);assert.equal(sent.length,8);assert.equal(requests.at(-1).body.p_publish,false);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,null);
 const explicit=message('EXPLICITPHONE','مطلوب براد من حلب إلى دبي +963955777666');explicit.key.participant='99999999999999@lid';await upsert([explicit]);assert.equal(sent.length,9);assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,'+963955777666');
 const countryMessage=message('COUNTRYROUTE','مطلوب شاحنه من قطر الى الاردن');countryMessage.key.participant='11111111111111@lid';countryMessage.key.participantPn='436605565676@s.whatsapp.net';await upsert([countryMessage]);assert.equal(sent.length,10);assert.equal(requests.at(-1).body.p_publish,true);assert.equal(requests.at(-1).body.p_parsed.load.to_city,'غير محددة');assert(sent.at(-1).payload.text.includes('+436605565676'));
-console.log('PASS: country and city routes, sender phone, restored place learning, dual request classification, weight/count, missing-origin rejection, captions, private/excluded groups, RPC and channel gating');
+const screenshotCases=[
+ {text:'السلام عليكم\nيلزمنا سطحة لتحميل اسفنج من طرطوس الي حلب',phone:'+963957774185',from:'طرطوس',to:'حلب',cargo:'اسفنج',trailer:'سطحة',count:1},
+ {text:'السلام عليكم\nمطلوب سياره لتحميل الحنطة من سوق الصالحية بدير الزور للباب\nالتحميل الصبح\nقد ما بحقلك حمل\nوصل مكتب الدور عالسائق\nكل السيارات شغالة',phone:'+963986266492',from:'سوق الصالحية بدير الزور',to:'الباب',cargo:'حنطة',count:1},
+ {text:'برادين من باب الهوى على جابر حمولة كريمة وزن 10 طون',phone:'+963996950218',from:'باب الهوى',to:'جابر',cargo:'كريمة',trailer:'براد',count:2,weight:10},
+ {text:'مطلوب سطحة طول ١٣.٦٠ لتحميل من عدرا الى القامشلي\nالتحميل بكرا الصبح\nالحمل اسفنج\nمكتب الدور عل السائق',phone:'+963957774185',from:'عدرا',to:'القامشلي',cargo:'اسفنج',trailer:'سطحة',count:1},
+ {text:'مطلوب سطحا من جده إلى الرياض.\nالتحميل الصباح',phone:'+966545799640',from:'جدة',to:'الرياض',trailer:'سطحة',count:1},
+ {text:'مطلوب سياره لتحميل الطحين من ( منبج ) للشام ٣٥ طن التحميل هلق فورا',phone:'+963986266492',from:'منبج',to:'دمشق',cargo:'طحين',count:1,weight:35},
+ {text:'السلام عليكم لازمني تلت برادات تحميل من باب الهوه لليعروبيه',phone:'+963981225154',from:'باب الهوى',to:'اليعربية',trailer:'براد',count:3},
+ {text:'مطلوب برادات تحميل من باب الهوى إلى جابر',phone:'+963985884575',from:'باب الهوى',to:'جابر',trailer:'براد',count:1}
+];
+for(const [i,sample] of screenshotCases.entries()){
+ const parsed=parse(sample.text,sample.phone);
+ assert(parsed.publishable,JSON.stringify({sample,parsed}));assert.equal(parsed.kind,'load');
+ assert.equal(parsed.load.from_city,sample.from);assert.equal(parsed.load.to_city,sample.to);
+ assert.equal(parsed.load.contact_phone,sample.phone);assert.equal(parsed.load.trucks_required,sample.count);
+ if(sample.cargo)assert.equal(parsed.load.cargo_type,sample.cargo);
+ if(sample.trailer)assert.equal(parsed.load.required_trailer_type,sample.trailer);
+ if(sample.weight)assert.equal(parsed.load.weight_tons,sample.weight);
+ assert.equal(parsed.load.notes,sample.text);
+ const msg=message('SCREENSHOT'+i,sample.text);msg.key.participant=sample.phone.slice(1)+'@s.whatsapp.net';
+ await upsert([msg]);assert.equal(requests.at(-1).body.p_publish,true);assert.equal(sent.length,11+i);
+}
+assert.equal(parse('متوفر برادين فاضيين في سرمدا','+963955111222').kind,'truck_available');
+assert.equal(parse('متوفر برادين فاضيين في سرمدا','+963955111222').load.trucks_required,2);
+assert.equal(parse('برادين من باب الهوى على جابر','+963955111222').publishable,false);
+assert.equal(parse('مطلوب شاحنة موديل 2014 تكون منافيخ عمامي خلفي الي عندو يخبرنه الله يرزقك الجميع','+963955111222').publishable,false);
+assert.equal(parse('الله يرزقك الجميع').load,null);
+assert.equal(getText({protocolMessage:{type:0}}),'');
+console.log('PASS: all eight screenshot advertisements, country/city routes, sender phone, availability, exclusions and platform/channel gating');
