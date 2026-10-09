@@ -444,6 +444,18 @@ function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
 let groupRefreshInFlight=false;
+const verifiedRequestedGroups=new Map();
+async function verifyRequestedMembership(sock,info){
+ try{
+  const meta=await sock.groupMetadata(info.id);
+  const selfIds=new Set([sock.user?.id,sock.user?.lid].filter(Boolean).map(senderIdentity));
+  const selfPhone=contactFromJid(sock.user?.id);
+  const member=(meta.participants||[]).some(p=>[p.id,p.lid,p.jid].some(id=>id&&(selfIds.has(senderIdentity(id))||(selfPhone&&contactFromJid(id)===selfPhone))));
+  if(member){verifiedRequestedGroups.set(info.id,meta);console.log('Requested group membership verified',JSON.stringify({id:info.id,name:meta.subject||info.subject}));return true;}
+  console.log('Requested group membership unconfirmed',JSON.stringify({id:info.id,name:info.subject}));
+ }catch(e){console.log('Requested group membership check failed',JSON.stringify({id:info.id,name:info.subject,error:String(e)}));}
+ return false;
+}
 async function refreshJoinedGroups(sock,joinRequested=false){
  if(activeSocket!==sock||groupRefreshInFlight)return;
  if(replacementPhone&&String(sock.user?.id||'').split('@')[0].split(':')[0]!==replacementPhone)return;
@@ -458,13 +470,17 @@ async function refreshJoinedGroups(sock,joinRequested=false){
     try{
      const info=await sock.groupGetInviteInfo(code);
      if(!info?.id?.endsWith('@g.us'))throw new Error('Invalid group metadata');
+     console.log('Requested group identified',JSON.stringify({id:info.id,name:info.subject}));
      if(groups[info.id]){console.log('Requested group already joined',JSON.stringify({id:info.id,name:info.subject}));continue;}
      if(EXCLUDED_GROUPS.has(info.id)){console.log('Requested group excluded',info.id);continue;}
-     await sock.groupAcceptInvite(code);
-     console.log('Requested group join submitted',JSON.stringify({id:info.id,name:info.subject}));
+     if(await verifyRequestedMembership(sock,info))continue;
+     try{await sock.groupAcceptInvite(code);console.log('Requested group join submitted',JSON.stringify({id:info.id,name:info.subject}));}
+     catch(e){console.error('Requested group join response',JSON.stringify({id:info.id,name:info.subject,error:String(e)}));}
+     await verifyRequestedMembership(sock,info);
     }catch(e){console.error('Requested group join failed',String(e));}
    }
    groups=await sock.groupFetchAllParticipating();
+   for(const [id,meta] of verifiedRequestedGroups)if(!groups[id])groups[id]=meta;
   }
   if(activeSocket!==sock)return;
   groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;groupCheckError='';
