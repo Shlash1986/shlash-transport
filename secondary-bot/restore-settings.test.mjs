@@ -114,3 +114,9 @@ await upsert([message('AIRECOVERY1',ad)]);assert.equal(requests.at(-1).body.p_pa
 const aiBefore=aiCalls;context.extractFreightAd=async()=>{aiCalls++;return aiResult;};
 await upsert([message('AIPRIVATE',ad,'963900000001@s.whatsapp.net'),message('AIEXCLUDED',ad,'120363285533629337@g.us')]);assert.equal(aiCalls,aiBefore);assert.equal(sent.length,19);
 console.log('PASS: AI fallback integration, contact provenance, route grounding and private/excluded isolation');
+const multiNumberAd='السلام عليكم ورحمة الله وبركاته\nمطلوب 3 سطحة ستارة اوجوانب الماني من جده الي الاحساء\n0506965053\n0554807357\n0173243922';
+const multi=parse(multiNumberAd,'+966506965053');assert(multi.publishable);assert.equal(multi.load.contact_phone,'+966506965053');assert.equal(multi.load.trucks_required,3);assert.equal(multi.load.from_city,'جدة');assert.equal(multi.load.to_city,'الأحساء');
+for(const numbers of ['0506965053 0554807357 0173243922','+966 50 696 5053\n+966 55 480 7357','٠٥٠٦٩٦٥٠٥٣\n٠٥٥٤٨٠٧٣٥٧'])assert.equal(parse('مطلوب شاحنة من جدة إلى الأحساء\n'+numbers).load.contact_phone,'+966506965053');
+assert.equal(parse('مطلوب شاحنة من جدة إلى الأحساء\n+43 660 556 5676').load.contact_phone,'+436605565676');
+assert.equal(parse('مطلوب شاحنة من جدة إلى الأحساء\n+963 957 910 793').load.contact_phone,'+963957910793');
+console.log('PASS: separate contact numbers, formatted international numbers and Arabic digits');
