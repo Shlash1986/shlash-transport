@@ -179,7 +179,27 @@ function route(text){
  if(unique.length!==2)return null;
  return {from_city:canonicalPlace(unique[0].city),to_city:canonicalPlace(unique[1].city)};
 }
-function phone(text       ){const m=normalize(text).match(/(?:\+|00)?\d[\d\s-]{7,18}\d/g)||[];for(const raw of m){const compact=raw.replace(/[\s-]/g,"");const digits=compact.replace(/^\+/,"").replace(/^00/,"");if(digits.length>=9&&digits.length<=15)return compact.startsWith("+")?compact:compact.startsWith("00")?"+"+compact.slice(2):compact;}return null;}
+function phone(text){
+ // Preserve line boundaries: separate contact numbers must never be joined.
+ for(const line of String(text||'').split(/[\r\n،,;]+/u)){
+  const runs=normalize(line).match(/\+?\d[\d ()-]*\d/g)||[];
+  for(const run of runs){
+   const parts=run.match(/\+?\d+/g)||[];
+   for(let i=0;i<parts.length;i++){
+    let compact=parts[i];
+    const digits=()=>compact.replace(/^\+/,'').replace(/^00/,'');
+    if(digits().length<3&&!/^(?:\+|00|43$|90$|20$)/.test(compact))continue;
+    const wholeNumber=digits().length>=9;
+    for(let j=i+1;!wholeNumber&&j<parts.length;j++){
+     if(parts[j].startsWith('+')||(digits().length>=9&&parts[j].length>=7)||digits().length+parts[j].length>15)break;
+     compact+=parts[j];
+    }
+    if(digits().length>=9&&digits().length<=15)return compact.startsWith('+')?compact:compact.startsWith('00')?'+'+compact.slice(2):compact;
+   }
+  }
+ }
+ return null;
+}
 function contactFromJid(jid=""){
  const match=String(jid||'').match(/^(\d{9,15})(?::\d+)?@s\.whatsapp\.net$/);
  return match?'+'+match[1]:null;
