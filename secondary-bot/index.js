@@ -380,7 +380,7 @@ async function connect(){
      let freightKey=null;
      try{
        const jid=String(m.key?.remoteJid||'');
-       if(!jid.endsWith('@g.us')||m.key?.fromMe||EXCLUDED_GROUPS.has(jid))continue;
+       if(!jid.endsWith('@g.us')||EXCLUDED_GROUPS.has(jid))continue;
        rememberMessage(m);
        if(!m.message)continue;
        const stamp=Number(m.messageTimestamp||0)*1000;
@@ -392,7 +392,7 @@ async function connect(){
        const text=getText(m.message);
        if(!text)continue;
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
-       const sender=m.key.participantAlt||m.key.participant||'';
+       const sender=m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
        const finalParsed=parse(text,contactFromJid(sender));
        const shouldPublish=finalParsed.publishable&&(finalParsed.kind!=='load'||finalParsed.confidence>=0.86);
        if(!shouldPublish){console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
@@ -441,5 +441,6 @@ http.createServer(async(req,res)=>{
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'supabase-connection-fix-20261009',ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
