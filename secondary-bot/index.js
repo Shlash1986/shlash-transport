@@ -6,6 +6,7 @@ const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
 let qr='',status='starting';
 let resolvedChannelJid='';
+let groupCount=null,groupCheckError='';
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
 async function connect(){
  const {state,saveCreds}=await useMultiFileAuthState(dir);
@@ -13,7 +14,7 @@ async function connect(){
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){qr=nextQR;status='scan';}
-   if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();const existing=Object.values(groups).find(g=>g?.inviteCode===invite);if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){console.error('Group join attempt failed',String(e));}})();}
+   if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;groupCheckError='';console.log('Joined WhatsApp group count',groupCount);const existing=Object.values(groups).find(g=>g?.inviteCode===invite);if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
    if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;if(code!==DisconnectReason.loggedOut)setTimeout(connect,5000);}
  });
  // Read freight advertisements from joined groups; never message individuals.
@@ -53,5 +54,5 @@ http.createServer(async(req,res)=>{
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
- res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
