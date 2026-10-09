@@ -11,7 +11,7 @@ async function connect(){
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){qr=nextQR;status='scan';}
-   if(connection==='open'){qr='';status='connected';}
+   if(connection==='open'){qr='';status='connected';(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();const existing=Object.values(groups).find(g=>g?.inviteCode===invite);if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){console.error('Group join attempt failed',String(e));}})();}
    if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;if(code!==DisconnectReason.loggedOut)setTimeout(connect,5000);}
  });
  // Read freight advertisements from joined groups; never message individuals.
