@@ -9,13 +9,16 @@ let mode='success';
 const sock={ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
 const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body)return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};
- const body=JSON.parse(opts.body);requests.push({url,body});
+ const body=JSON.parse(opts.body);
+ if(body.p_message_id==='connection-probe'){assert.equal(body.p_text,'');assert.equal(body.p_publish,false);return {ok:false,status:400,json:async()=>({code:'P0001',message:'invalid_text'})};}
+ requests.push({url,body});
  return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available'))})};
 }});
-await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus})};})()',context);
+await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
 const {parse,getText}=context.api;
 assert.equal(context.api.getLearning().learnedPlaces,1);
 assert.equal(context.api.getLearning().placeLearningStatus,'ready');
+assert.equal(context.api.getLearning().ingestConnectionStatus,'ready');
 assert(!context.api.cityCountry.has('تضارب'));
 const complete=['مطلوب براد من باب الهوا إلى دبي\n+963957910793','مطلوب شاحنة من ينبع إلى الدمام\n+4368120528715','سياره تحمل قطن من قحطانيه يلا تل ابيض\n+963957910793','مطلوب ستارة عدد 2 من حلب عنصيب الحمولة 3 طون\n+905392142652','مطلوب ستارتين من حلب إلى نصبيض\n+963957910793','مطلوب براد من مدينة اختبار إلى دبي\n+963957910793'];
 for(const text of complete){const p=parse(text);assert.equal(p.kind,'load',text);assert(p.publishable,text);assert(p.confidence>=0.86);assert(p.load.from_country&&p.load.to_country);}
