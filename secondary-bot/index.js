@@ -270,6 +270,9 @@ let activeSocket=null,reconnectTimer=null;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
 const processedMessages=new Map();
 const recentMessages=new Map();
+// Groups 1–9 excluded by the owner: exchange rates and personal business, not freight.
+const EXCLUDED_GROUPS=new Set(["120363285533629337@g.us","120363032467180231@g.us","120363390071970492@g.us","120363246703383152@g.us","120363430110878767@g.us","120363165708973439@g.us","120363258441959550@g.us","120363306190092623@g.us","120363433294574615@g.us"]);
+let monitoredGroupCount=null;
 function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
@@ -281,7 +284,7 @@ async function connect(){
  sock.ev.on('creds.update',saveCreds);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){qr=nextQR;status='scan';}
-   if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite||g.id==='120363431703780865@g.us');if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
+   if(connection==='open'){qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));}catch(err){console.error('Channel resolution pending',String(err));}})();(async()=>{try{const invite='ENfU2aCppVa545mZW7W5Y3';const groups=await sock.groupFetchAllParticipating();groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));groupCheckError='';console.log('Joined WhatsApp group count',groupCount);console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));const existing=Object.values(groups).find(g=>g?.inviteCode===invite||g.id==='120363431703780865@g.us');if(existing){console.log('Already in target group',existing.subject);return;}const id=await sock.groupAcceptInvite(invite);console.log('Group invitation accepted',id);}catch(e){groupCheckError=String(e);console.error('Group join attempt failed',String(e));}})();}
    if(connection==='close'){qr='';status='disconnected';const code=lastDisconnect?.error?.output?.statusCode;console.warn('WhatsApp disconnected',code);if(activeSocket===sock&&code!==DisconnectReason.loggedOut&&!reconnectTimer){reconnectTimer=setTimeout(()=>{reconnectTimer=null;connect().catch(e=>console.error('Reconnect error',String(e)));},7000);}}
  });
  // Read freight advertisements from joined groups; never message individuals.
@@ -289,9 +292,9 @@ async function connect(){
    if(type!=='notify'&&type!=='append')return;
    for(const m of messages){
      try{
-       rememberMessage(m);
        const jid=String(m.key?.remoteJid||'');
-       if(!jid.endsWith('@g.us')||m.key?.fromMe)continue;
+       if(!jid.endsWith('@g.us')||m.key?.fromMe||EXCLUDED_GROUPS.has(jid))continue;
+       rememberMessage(m);
        if(!m.message)continue;
        const stamp=Number(m.messageTimestamp||0)*1000;
        if(stamp && Date.now()-stamp>24*60*60*1000)continue;
@@ -333,11 +336,11 @@ async function connect(){
 connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});
 http.createServer(async(req,res)=>{
  const u=new URL(req.url,'http://localhost');
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'receive-publish-fix-20261009',status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'exclude-nonfreight-groups-20261009',excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
- res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'receive-publish-fix-20261009',receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
+ res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'exclude-nonfreight-groups-20261009',excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
 
