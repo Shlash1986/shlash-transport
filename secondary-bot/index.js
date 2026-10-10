@@ -396,7 +396,7 @@ function formatChannelAd(parsed,rawText='',publication=null){
   .replace(/\+?\d[\d ()-]{7,}\d/g,number=>normalizeContact(number,null,l.from_country)===contact?'':number)
   .replace(/(?:إعلان|اعلان)\s+شحن\s+جديد|شاحنة\s+متاحة(?:\s+على\s+TruckLink(?:\s+MENA)?)?/gu,'')
   .replace(/(?:السلام عليكم(?: ورحمة الله(?: وبركاته)?)?|وعليكم السلام)/gu,'')
-  .replace(/(?:رقم التواصل|رقم الهاتف|للتواصل|هاتف|اتصال|واتساب|TruckLink MENA)\s*[:：]?\s*(?=$|\n)/gmu,'');
+  .replace(/(?:رقم التواصل|رقم الهاتف|للتواصل|هاتف|اتصال|واتساب|TruckLink MENA|شاحنات الشرق)\s*[:：]?\s*(?=$|\n)/gmu,'');
  const from=known(l.from_city)||known(l.from_country);
  let to=known(l.to_city)||known(l.to_country);
  // Preserve explicitly joined alternatives, such as "جابر ونصيب".
@@ -438,7 +438,7 @@ function formatChannelAd(parsed,rawText='',publication=null){
  }
  if(details.length)lines.push('','📝 التفاصيل:',...details);
  if(contact)lines.push('','📞 للتواصل:','\u200e'+contact+'\u200e');
- lines.push('','🌐 TruckLink MENA','https://trucklink-mena.netlify.app/');
+ lines.push('','🌐 شاحنات الشرق','https://easttrucks.com/');
  return lines.join('\n');
 }
 
@@ -603,6 +603,39 @@ let monitoredGroupCount=null;
 function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
+
+const CHANNEL_BRAND_VERSION='easttrucks-20261010';
+let channelBrand={status:'pending',version:CHANNEL_BRAND_VERSION};
+let channelBrandAttempted=false;
+async function syncChannelBrand(sock,metadata){
+ if(channelBrandAttempted||!resolvedChannelJid.endsWith('@newsletter'))return;
+ channelBrandAttempted=true;
+ const receipt='/data/channel-brand-'+CHANNEL_BRAND_VERSION+'.json';
+ try{const saved=JSON.parse(await readFile(receipt,'utf8'));if(saved.status==='verified'){channelBrand=saved;return;}}catch{}
+ channelBrand={status:'updating',version:CHANNEL_BRAND_VERSION};
+ try{
+  const name='شاحنات الشرق';
+  const description='منصة الحمولات والشاحنات في الشرق الأوسط\nنشر طلبات النقل والشاحنات المتاحة والتواصل المباشر.\nhttps://easttrucks.com/';
+  const currentName=metadata?.thread_metadata?.name?.text||metadata?.name;
+  if(currentName!==name)await sock.newsletterUpdateName(resolvedChannelJid,name);
+  channelBrand.nameUpdated=true;
+  const currentDescription=metadata?.thread_metadata?.description?.text||metadata?.description;
+  if(currentDescription!==description)await sock.newsletterUpdateDescription(resolvedChannelJid,description);
+  channelBrand.descriptionUpdated=true;
+  const previousPicture=metadata?.thread_metadata?.picture?.id||metadata?.picture?.id;
+  await sock.newsletterUpdatePicture(resolvedChannelJid,{url:'https://easttrucks.com/assets/easttrucks-logo.png'});
+  channelBrand.pictureSubmitted=true;
+  const verified=await sock.newsletterMetadata('invite',CHANNEL_INVITE);
+  const verifiedName=verified?.thread_metadata?.name?.text||verified?.name;
+  const verifiedDescription=verified?.thread_metadata?.description?.text||verified?.description;
+  const pictureId=verified?.thread_metadata?.picture?.id||verified?.picture?.id;
+  channelBrand.status=verifiedName===name&&verifiedDescription===description&&pictureId&&pictureId!==previousPicture?'verified':'pending_verification';
+  channelBrand.at=new Date().toISOString();
+  await writeFile(receipt,JSON.stringify(channelBrand));
+  console.log('Channel brand update',JSON.stringify(channelBrand));
+ }catch(error){channelBrand.status='failed';channelBrand.error=String(error).slice(0,200);console.error('Channel brand update failed',channelBrand.error);}
+}
+
 let groupRefreshInFlight=false;
 const verifiedRequestedGroups=new Map();
 async function verifyRequestedMembership(sock,info){
@@ -696,7 +729,7 @@ async function connect(authDir=dir,candidate=false){
       if(previous&&previous!==sock)previous.end(new Error('Account replaced by owner'));
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
-    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
+    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
@@ -816,7 +849,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'multi-freight-20261010',ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'easttrucks-20261010',channelBrand,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
