@@ -12,9 +12,10 @@ const sock={user:{id:'4368120528715:4@s.whatsapp.net'},groupMetadata:async()=>({
 const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
  const body=JSON.parse(opts.body);
+ if(url.endsWith('whatsapp_publication_number'))return {ok:true,json:async()=>body.p_action==='confirm'?{ready:true,sent:true}:{ready:true,ad_number:3000+sent.length,daily_number:59+sent.length,day:'2026-10-10',already_sent:false}};
  if(body.p_message_id==='connection-probe'){assert.equal(body.p_text,'');assert.equal(body.p_publish,false);return {ok:false,status:400,json:async()=>({code:'P0001',message:'invalid_text'})};}
  requests.push({url,body});
- return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available'))})};
+ return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available')),published_load_id:'00000000-0000-0000-0000-000000000001'})};
 }});
 context.isFreightCandidate=isFreightCandidate;context.getAIStatus=()=>({status:'not_configured'});context.extractFreightAd=async()=>{aiCalls++;return null;};
 await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,validateAIParse,refreshJoinedGroups,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
@@ -157,3 +158,6 @@ assert.equal(parse(fuel,'+9647512451315').publishable,false);
 await upsert([message('FUELONLY20261010',fuel)]);assert.equal(sent.length-sentBeforeMulti,5);
 console.log('PASS: four independent requests, route/contact provenance, idempotent retries, one truck with four destinations and fuel rejection');
 
+
+assert(sent.every(x=>x.payload.text.includes('رقم الإعلان بالمنصة:')));
+assert(sent.every(x=>/إعلان اليوم \d+/.test(x.payload.text)));
