@@ -611,7 +611,7 @@ async function syncChannelBrand(sock,metadata){
  if(channelBrandAttempted||!resolvedChannelJid.endsWith('@newsletter'))return;
  channelBrandAttempted=true;
  const receipt='/data/channel-brand-'+CHANNEL_BRAND_VERSION+'.json';
- try{const saved=JSON.parse(await readFile(receipt,'utf8'));if(saved.status==='verified'){channelBrand=saved;return;}}catch{}
+ try{const saved=JSON.parse(await readFile(receipt,'utf8'));if(saved.status==='verified'||saved.pictureSubmitted){channelBrand=saved;return;}}catch{}
  channelBrand={status:'updating',version:CHANNEL_BRAND_VERSION};
  try{
   const name='شاحنات الشرق';
