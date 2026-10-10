@@ -346,6 +346,60 @@ function parse(rawText       ,fallbackContact            =null){
   return {kind:truckAvailable?"truck_available":wanted?"load":"unknown",publishable,confidence,reason:publishable?null:truckAvailable?"truck_availability_incomplete":!wanted?"not_a_freight_request":!rt?"route_missing":!fc||!toc?"country_inference_missing":!ph?"contact_number_missing":!enoughFreightSignal?"freight_details_missing":"confidence_below_threshold",load:rt?{transport_scope:fc===toc?"local":"international",load_mode:"FTL",from_country:fc,from_city:rt.from_city,to_country:toc,to_city:rt.to_city==="غير محدد"?null:rt.to_city,cargo_type:cg,weight_tons:wt,required_trailer_type:tr||"غير محدد",trucks_required:tc,contact_phone:ph,contact_whatsapp:ph,posted_on_behalf:true,notes:text.slice(0,1200),status:"open",load_kind:"cargo",ad_duration_days:1,contact_visibility:"registered"}:null};
 }
 
+// Presentation only: never change the parsed payload or infer missing details.
+function formatChannelAd(parsed,rawText=''){
+ const l=parsed.load||{},isTruck=parsed.kind==='truck_available';
+ const known=value=>value&&!/غير محدد/u.test(String(value))?String(value).trim():'';
+ const vehicle=known(l.required_trailer_type);
+ const contact=l.contact_phone||l.contact_whatsapp||'';
+ const clean=String(rawText).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d)
+  .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'')
+  .replace(/https?:\/\/trucklink-mena\.netlify\.app\/?(?:[^\s]*)/giu,'')
+  .replace(/\+?\d[\d ()-]{7,}\d/g,number=>normalizeContact(number,null,l.from_country)===contact?'':number)
+  .replace(/(?:إعلان|اعلان)\s+شحن\s+جديد|شاحنة\s+متاحة(?:\s+على\s+TruckLink(?:\s+MENA)?)?/gu,'')
+  .replace(/(?:السلام عليكم(?: ورحمة الله(?: وبركاته)?)?|وعليكم السلام)/gu,'')
+  .replace(/(?:رقم التواصل|رقم الهاتف|للتواصل|هاتف|اتصال|واتساب|TruckLink MENA)\s*[:：]?\s*(?=$|\n)/gmu,'');
+ const from=known(l.from_city)||known(l.from_country);
+ let to=known(l.to_city)||known(l.to_country);
+ // Preserve explicitly joined alternatives, such as "جابر ونصيب".
+ const destinations=to?[to]:[];
+ if(to){
+  const n=normalize(clean),at=n.indexOf(normalize(to));
+  let tail=at<0?'':n.slice(at+normalize(to).length);
+  for(let i=0;i<8;i++){
+   const join=tail.match(/^\s*(?:أو|او|و|\/|،)\s*/u);if(!join)break;
+   tail=tail.slice(join[0].length);
+   const next=[...cityCountry.keys()].sort((a,b)=>b.length-a.length).find(city=>tail.startsWith(city)&&(!tail[city.length]||!/[\p{L}]/u.test(tail[city.length])));
+   if(!next)break;
+   const city=canonicalPlace(next);if(!destinations.includes(city))destinations.push(city);
+   tail=tail.slice(next.length);
+  }
+  to=destinations.join(' / ');
+ }
+ const lines=[isTruck?'🚚 شاحنة متاحة للتحميل':vehicle?'🚛 مطلوب '+vehicle:'🚛 طلب نقل',''];
+ if(from)lines.push('📍 من: '+from);
+ if(to)lines.push('🏁 إلى: '+to);
+ if(isTruck&&vehicle)lines.push('🚛 النوع: '+vehicle);
+ if(known(l.cargo_type))lines.push('📦 الحمولة: '+l.cargo_type);
+ if(l.weight_tons>0)lines.push('⚖️ الوزن: '+l.weight_tons+' طن');
+ if(l.trucks_required>1)lines.push('🔢 عدد الشاحنات: '+l.trucks_required);
+ const represented=[from,...destinations,vehicle,known(l.cargo_type)].filter(Boolean);
+ const details=[],seen=new Set();
+ for(const raw of clean.split(/\r?\n/)){
+  const line=raw.replace(/[🚛🚚📱📞🌐📍🏁*]/gu,'').replace(/^[\s:：،,|–-]+|[\s:：،,|–-]+$/gu,'').trim();
+  if(!line)continue;
+  let rest=normalize(line);
+  for(const value of represented)rest=rest.split(normalize(value)).join(' ');
+  rest=rest.replace(/(?:^|\s)(?:مطلوب|من|الي|الى|علي|على|باتجاه|متوفر|متاحة|متاح|فارغة|فارغ|فاضي|فاضية|عالفاضي|جاهزة|جاهز|للتحميل|التحميل|و|او)(?=\s|$)/gu,' ').replace(/[^\p{L}\p{N}]+/gu,'').trim();
+  if(!rest)continue;
+  const key=normalize(line);if(!seen.has(key)){seen.add(key);details.push(line);}
+ }
+ if(details.length)lines.push('','📝 التفاصيل:',...details);
+ if(contact)lines.push('','📞 للتواصل:','\u200e'+contact+'\u200e');
+ lines.push('','🌐 TruckLink MENA','https://trucklink-mena.netlify.app/');
+ return lines.join('\n');
+}
+
 function validateAIParse(text,data,fallbackContact){
  if(!data?.publish||!['load','truck_available'].includes(data.kind)||!Number.isFinite(data.confidence)||data.confidence<0.9||data.confidence>1)return null;
  const n=geographyText(text),allowed=new Set([...cityCountry.values(),'مصر']);
@@ -606,7 +660,7 @@ async function connect(authDir=dir,candidate=false){
        lastPublishError='';
        const channel=String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||'');
        if(channel.endsWith('@newsletter')){
-         const sent=await sock.sendMessage(channel,{text:(isTruck?'🚛 شاحنة متاحة':'🚛 إعلان شحن جديد')+'\n'+text.slice(0,1200)+'\n📱 '+finalParsed.load.contact_phone+'\n🌐 https://trucklink-mena.netlify.app/'});
+         const sent=await sock.sendMessage(channel,{text:formatChannelAd(finalParsed,text.slice(0,1200))});
          if(sent?.key?.id){publishedChannel++;console.log('Channel publication sent',JSON.stringify({sourceId:m.key.id,channel,messageId:sent.key.id}));}
        }else{lastPublishError='Channel unresolved';console.error(lastPublishError);}
      }catch(e){lastPublishError=String(e);console.error('Freight processing error',String(e));}
@@ -646,13 +700,14 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'ai-fallback-20261010',ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-layout-20261010',ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
 
