@@ -87,6 +87,7 @@ add("البحرين",["جسر الملك فهد","ميناء خليفة بن س�
 add("اليمن",["الوديعة اليمن","شحن اليمن","صرفيت","ميناء عدن","ميناء الحديدة","ميناء المكلا","سيئون","مأرب","تعز","إب","صنعاء","عدن"]);
 
 add("سوريا",["باب الهوا","باب الهوى","نصيب","نصبيض"]);
+add("سوريا",["حما"]);
 add("سوريا",["قحطانيه","قحطانية"]);
 add("سوريا",["باب الهوه","اليعروبيه","اليعربيه","سوق الصالحية بدير الزور"]);
 trailers.unshift([/(?:ستارتين)/u,"ستارة"],[/(?:سطحتين)/u,"سطحة"]);
@@ -314,18 +315,38 @@ function availabilityRoute(raw       ){
   if(!destination)return {from_city:origin==="الشام"?"دمشق":origin,to_city:"غير محدد"};
   return {from_city:origin==="الشام"?"دمشق":origin,to_city:destination==="الشام"?"دمشق":destination};
 }
+// Only explicit vehicle availability counts; fuel, cargo and advances may also be available.
+function hasAvailableVehicle(raw){
+ const n=normalize(raw);
+ const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا)';
+ const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
+ const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?';
+ return new RegExp('(?:^|[^\\p{L}])(?:'+state+gap+vehicle+'|'+vehicle+gap+state+'|(?:عندي|يوجد)'+gap+vehicle+')(?=$|[^\\p{L}])','u').test(n);
+}
+// An ad may list several jobs. Extract the first complete loading clause,
+// preserving the entire original in notes; never pair cities from different jobs.
+function primaryFreightText(raw){
+ const text=String(raw||'');
+ const starts=[...text.matchAll(/(?:^|\s)(?:و)?تحميل\s+(?=[\p{L}])/gu)];
+ if(starts.length<2)return text;
+ const first=text.slice(0,starts[1].index).trim();
+ return explicitRoute(first)?first:text;
+}
 function parse(rawText       ,fallbackContact            =null){
   const text=String(rawText||"").trim();
-  const n=normalize(text);
-  const availabilityHint=/(?:فاضي|فاضية|فارغ|متاح|متوفر|موجود|جاهز|جاهزة|(?:في|عندي|يوجد)\s+(?:\d+\s*)?(?:ستارة|ستاره|ستائر|سيارة|سيارات|شاحنة|براد|سطحة))/u.test(n);
+  const freightText=primaryFreightText(text);
+  const n=normalize(freightText);
+  const availabilityHint=hasAvailableVehicle(freightText);
   const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا|ني)?|لازم(?:نا|ني)|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:(?:\d+|تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?)\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
-  const truckAvailable=!vehicleRequest&&(availabilityHint||/(?:طالع|طالعه|جاهز|جاهزه)\s+(?:من|في|بال|بعد)/u.test(n));
-  const rt=route(text)||(truckAvailable?trainedFreightRoute(text,true):null);
+  const truckAvailable=!vehicleRequest&&availabilityHint;
+  const rt=route(freightText)||(truckAvailable?trainedFreightRoute(freightText,true):null);
+  if(rt?.from_city==='حما')rt.from_city='حماة';
+  if(rt?.to_city==='حما')rt.to_city='حماة';
   const rawPh=phone(text);
-  const tr=trailer(text);
-  const wt=weight(text);
-  const tc=count(text);
-  const cg=cargo(text);
+  const tr=trailer(freightText);
+  const wt=weight(freightText);
+  const tc=count(freightText);
+  const cg=cargo(freightText);
   let fc=rt?(rt.from_country||inferCountry(rt.from_city)):null;
   let toc=rt?(rt.to_country||inferCountry(rt.to_city)):null;
   const ph=normalizeContact(rawPh,fallbackContact,fc||toc);
@@ -402,6 +423,7 @@ function formatChannelAd(parsed,rawText=''){
 
 function validateAIParse(text,data,fallbackContact){
  if(!data?.publish||!['load','truck_available'].includes(data.kind)||!Number.isFinite(data.confidence)||data.confidence<0.9||data.confidence>1)return null;
+ if(data.kind==='truck_available'&&!hasAvailableVehicle(primaryFreightText(text)))return null;
  const n=geographyText(text),allowed=new Set([...cityCountry.values(),'مصر']);
  const place=(raw,country)=>{
   if(typeof raw!=='string'||!allowed.has(country))return null;
@@ -707,6 +729,7 @@ http.createServer(async(req,res)=>{
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
 
