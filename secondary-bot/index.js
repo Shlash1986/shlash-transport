@@ -385,7 +385,7 @@ function parse(rawText       ,fallbackContact            =null){
 }
 
 // Presentation only: never change the parsed payload or infer missing details.
-function formatChannelAd(parsed,rawText=''){
+function formatChannelAd(parsed,rawText='',publication=null){
  const l=parsed.load||{},isTruck=parsed.kind==='truck_available';
  const known=value=>value&&!/غير محدد/u.test(String(value))?String(value).trim():'';
  const vehicle=known(l.required_trailer_type);
@@ -415,6 +415,10 @@ function formatChannelAd(parsed,rawText=''){
   to=destinations.join(' / ');
  }
  const lines=[isTruck?'🚚 شاحنة متاحة للتحميل':vehicle?'🚛 مطلوب '+vehicle:'🚛 طلب نقل',''];
+ if(publication){
+  const date=publication.day.split('-').reverse().join('/');
+  lines.unshift('📅 '+date+' | إعلان اليوم '+publication.daily_number,'🔖 رقم الإعلان بالمنصة: '+publication.ad_number,'');
+ }
  if(from)lines.push('📍 من: '+from);
  if(to)lines.push('🏁 إلى: '+to);
  if(isTruck&&vehicle)lines.push('🚛 النوع: '+vehicle);
@@ -491,6 +495,41 @@ import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysocke
 import QRCode from 'qrcode';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import http from 'node:http';
+let numberedChannelQueue=Promise.resolve();
+async function publicationNumber(adId,action='reserve',messageId=null){
+ const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/whatsapp_publication_number',{
+  method:'POST',signal:AbortSignal.timeout(15000),
+  headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},
+  body:JSON.stringify({p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_ad_id:adId,p_action:action,p_message_id:messageId})
+ });
+ if(!response.ok)throw new Error('Publication numbering HTTP '+response.status);
+ return response.json();
+}
+function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
+ const task=numberedChannelQueue.then(async()=>{
+  if(!adId)throw new Error('Published advertisement ID missing');
+  let reference;
+  for(let attempt=0;attempt<300;attempt++){
+   reference=await publicationNumber(adId);
+   if(reference.ready)break;
+   await new Promise(resolve=>setTimeout(resolve,2000));
+  }
+  if(!reference?.ready)throw new Error('Publication numbering initialization pending');
+  if(reference.already_sent)return null;
+  if(!Number.isSafeInteger(reference.ad_number)||reference.ad_number<3000||!Number.isInteger(reference.daily_number)||reference.daily_number<1||!/^\d{4}-\d{2}-\d{2}$/.test(reference.day))throw new Error('Invalid publication reference');
+  const sent=await sock.sendMessage(channel,{text:formatChannelAd(parsed,text,reference)});
+  if(!sent?.key?.id)throw new Error('Channel message ID missing');
+  console.log('Channel publication sent',JSON.stringify({sourceId,channel,messageId:sent.key.id,adId,...reference}));
+  // A failed receipt update must never cause a second WhatsApp send.
+  for(let attempt=0;attempt<3;attempt++){
+   try{await publicationNumber(adId,'confirm',sent.key.id);break;}
+   catch(error){if(attempt===2)console.error('Channel receipt confirmation failed',JSON.stringify({adId,messageId:sent.key.id,error:String(error)}));}
+  }
+  return sent;
+ });
+ numberedChannelQueue=task.catch(()=>{});
+ return task;
+}
 // Restore the old runner's place learning, without importing its private replies
 // or guessing missing endpoints. Existing curated entries always win.
 let learnedPlaces=0,placeLearningStatus='pending';
@@ -733,8 +772,9 @@ async function connect(authDir=dir,candidate=false){
        lastPublishError='';
        const channel=String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||'');
        if(channel.endsWith('@newsletter')){
-         const sent=await sock.sendMessage(channel,{text:formatChannelAd(finalParsed,text.slice(0,1200))});
-         if(sent?.key?.id){publishedChannel++;console.log('Channel publication sent',JSON.stringify({sourceId:m.key.id,channel,messageId:sent.key.id}));}
+         const adId=outcome.published_load_id||outcome.published_truck_id;
+         const sent=await sendNumberedChannelAd(sock,channel,finalParsed,text.slice(0,1200),adId,messageId);
+         if(sent?.key?.id)publishedChannel++;
        }else{lastPublishError='Channel unresolved';console.error(lastPublishError);}
        }catch(e){lastPublishError=String(e);console.error('Freight part error',JSON.stringify({id:messageId,error:String(e)}));}
        finally{if(freightKey)inFlightFreightTexts.delete(freightKey);freightKey=null;}
