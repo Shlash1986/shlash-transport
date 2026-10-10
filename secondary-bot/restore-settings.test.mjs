@@ -131,3 +131,29 @@ sock.groupGetInviteInfo=async()=>({id:'120363285533629337@g.us',subject:'Exclude
 await context.api.refreshJoinedGroups(sock,true);assert.equal(acceptedInvites.length,1);
 await context.api.refreshJoinedGroups({},true);assert.equal(acceptedInvites.length,1);
 console.log('PASS: authorized group joins, existing memberships, excluded groups and inactive socket guards');
+
+const multipleRequests='مطلوب برادات من الرياض على الاردن ومطلوب برادات من حائل على الدمام على الرياض ومطلوب ستار من العلا الى الرياض771011611';
+const multiMessage=message('MULTIROUTES20261010',multipleRequests);
+multiMessage.key.participant='967777266373@s.whatsapp.net';
+const sentBeforeMulti=sent.length,requestsBeforeMulti=requests.length;
+await upsert([multiMessage]);
+assert.equal(sent.length-sentBeforeMulti,4);
+const splitRequests=requests.slice(requestsBeforeMulti);
+assert.deepEqual(splitRequests.map(r=>[r.body.p_parsed.load.from_city,r.body.p_parsed.load.to_city]),[['الرياض','غير محددة'],['حائل','الدمام'],['حائل','الرياض'],['العلا','الرياض']]);
+assert.equal(new Set(splitRequests.map(r=>r.body.p_message_id)).size,4);
+assert(splitRequests.every(r=>r.body.p_parsed.load.contact_phone==='+967771011611'));
+assert.equal(splitRequests[3].body.p_parsed.load.required_trailer_type,'ستارة');
+await upsert([multiMessage]);assert.equal(sent.length-sentBeforeMulti,4);
+const flatbedText='متوفرسطحه بعدرا لحماه حمص لاذقيه طرطوس 09817124\n70';
+const flatbed=message('ADRAFLATBED20261010',flatbedText);flatbed.key.participant='963981712470@s.whatsapp.net';
+await upsert([flatbed]);assert.equal(sent.length-sentBeforeMulti,5);
+const flatbedPayload=requests.at(-1).body.p_parsed;
+assert.equal(flatbedPayload.kind,'truck_available');assert.equal(flatbedPayload.load.from_city,'عدرا');
+assert.equal(flatbedPayload.load.to_city,'حماة / حمص / اللاذقية / طرطوس');
+assert.equal(flatbedPayload.load.contact_phone,'+963981712470');
+assert(sent.at(-1).payload.text.includes('حماة / حمص / اللاذقية / طرطوس'));
+const fuel='السلام عليكم متوفر مازوت على طريق العروبيه بالكسك اللي بده يحاكيني خاص';
+assert.equal(parse(fuel,'+9647512451315').publishable,false);
+await upsert([message('FUELONLY20261010',fuel)]);assert.equal(sent.length-sentBeforeMulti,5);
+console.log('PASS: four independent requests, route/contact provenance, idempotent retries, one truck with four destinations and fuel rejection');
+
