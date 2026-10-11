@@ -52,3 +52,14 @@ console.log('PASS: screenshot freight cases, ambiguous routes, sales, missing co
 
 assert.equal(api.parse(cases[1][0],cases[1][1]).load.trucks_required,2);
 assert.equal(api.parse(cases[3][0],cases[3][1]).load.cargo_type,'مياه');
+
+for(const [text,contact,kind,from,to,weight,trucks] of [
+ ['السلام عليكم مطلوب سطحات عدد 2 اوراق نظامية من طريق الخرج الى امالا ذهاب واياب\nحموله انترلوك على طبالي\n0547130827','+966547130827','load','طريق الخرج','امالا',null,2],
+ ['Rabigh port to\nriyadh\nEmpty return\nRabigh yar\nround trip\nFlatbed\n40 ft container\n11 ton','+966599837121','load','ميناء رابغ','الرياض',11,1],
+ ['جنابي ب الشام لعندو شي الله يرزق الجميع','+963945488380','truck_available','دمشق',null,null,1]
+]){
+ const p=api.parse(text,contact);assert.equal(p.publishable,true,JSON.stringify(p));
+ assert.equal(p.kind,kind);assert.equal(p.load.from_city,from);assert.equal(p.load.to_city,to);assert.equal(p.load.weight_tons,weight);assert.equal(p.load.trucks_required,trucks);
+}
+assert.equal(api.parse('قاطره مقطوره ما تمشي','+963968845025').publishable,false);
+assert.equal(api.parse('Rabigh port to unknown city\nFlatbed container 11 ton','+966599837121').publishable,false);

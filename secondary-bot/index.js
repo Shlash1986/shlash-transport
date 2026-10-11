@@ -7,7 +7,7 @@ function add(c       , cities         ){ for(const city of cities) cityCountry.s
 add("سوريا",["دمشق","الشام","شام","عين عاروس","عين عروس","عين العروس","حلب","إدلب","ادلب","سرمدا","باب الهوى","معبر باب الهوى","باب السلامة","باب السلام","معبر باب السلام","جرابلس","الباب","الرقة","الحسكة","القامشلي","تدمر","حمص","حماة","حماه","طرطوس","بانياس","دير الزور","ديرالزور","اليعربية","اليعروبية","ساحة التبادل اليعربية","ساحة تبادل اليعربية","التنف","البوكمال","تل أبيض","رأس العين","خان العسل","نصيب","معبر نصيب","الدرباسية","رميلان","منبج","عفرين","عدرا","القحطانية","تل تمر","تل حميس"]);
 add("الأردن",["عمان","عمّان","جابر","معبر جابر","الرمثا","الزرقاء","العقبة","المعبر الشمالي","الشيخ حسين","سحاب","الأزرق","إربد","اربد"]);
 add("العراق",["بغداد","البصرة","الموصل","أربيل","اربيل","كركوك","ربيعة","القائم","كبيسة","الوليد","طريبيل","زرباطية","سنجار","بيجي","النجف","تكريت","سامراء","دهوك","السماوة","الحلة"]);
-add("السعودية",["الرياض","جدة","جده","الدمام","الجبيل","جبيل","جيزان","جازان","مكة","مكه","المدينة","المدينه","تبوك","خميس مشيط","القصيم","قصيم","سدير","صعبر","ينبع","الطائف","حائل","بريدة","بريده","عنيزة","عنيزه","الخبر","الاحساء","الأحساء","نجران","أبها","ابها","حفر الباطن","حفرالباطن","رنية","الخرمة"]);
+add("السعودية",["الرياض","جدة","جده","الدمام","الجبيل","جبيل","جيزان","جازان","مكة","مكه","المدينة","المدينه","تبوك","خميس مشيط","القصيم","قصيم","سدير","صعبر","ينبع","الطائف","حائل","بريدة","بريده","عنيزة","عنيزه","الخبر","الاحساء","الأحساء","نجران","أبها","ابها","حفر الباطن","حفرالباطن","رنية","الخرمة","أمالا","امالا","طريق الخرج","رابغ","ميناء رابغ"]);
 add("الإمارات",["دبي","أبوظبي","ابوظبي","الشارقة","الشارقه","العين"]);
 add("لبنان",["بيروت","طرابلس لبنان","البقاع","شتورا"]);
 add("عُمان",["مسقط","صلالة","صلاله"]);
@@ -105,7 +105,7 @@ function canonicalPlace(city){return ({'عزاز':'أعزاز','اعزاز':'أ�
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
-const cargoWords=["مياه","اكياس جامبو","حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
+const cargoWords=["انترلوك","مياه","اكياس جامبو","حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
   const m=a.length,n=b.length;
@@ -168,7 +168,7 @@ function explicitRoute(text){
  const match=n.match(/(?:^|[^\p{L}])من\s+(.+?)\s+(?:الى|الي|على|علي|باتجاه)\s+(.+)$/u);
  if(!match)return null;
  const from=explicitEndpoint(match[1]);
- const destination=match[2].split(/\s+(?:الحمولة|الحموله|حمولة|حموله|وزن|الوزن|للتواصل|رقم|هاتف|تحميل|طريق|عبر|ترانزيت)(?=\s|:)|[\n،,;]|\s+(?=[+\d])/u)[0];
+ const destination=match[2].split(/\s+(?:الحمولة|الحموله|حمولة|حموله|وزن|الوزن|للتواصل|رقم|هاتف|تحميل|ذهاب|طريق|عبر|ترانزيت)(?=\s|:)|[\n،,;]|\s+(?=[+\d])/u)[0];
  const to=explicitEndpoint(destination);
  if(!from||!to)return null;
  return {from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country};
@@ -320,7 +320,7 @@ function count(text       ){
   const wordCount=n.match(/(?:^|[^\p{L}])(تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?|ستة?|سبعة?|ثمانية|ثمان|تسعة?|عشرة?)\s+(?:برادات|سيارات|شاحنات|سطحات|ستائر|ستاير|قلابات|تريلات)(?=$|[^\p{L}])/u);
   if(wordCount)return words[wordCount[1]];
   const pats=[
-    /(?:براد|ستارة|ستاره|شاحنة|سيارة|تريلا|سطحة)\s*(?:عدد)\s*(\d{1,3})(?!\d)/u,
+    /(?:برادات|سطحات|شاحنات|سيارات|براد|ستارة|ستاره|شاحنة|سيارة|تريلا|سطحة)\s*(?:عدد)\s*(\d{1,3})(?!\d)/u,
     /(?:مطلوب|نحتاج|يلزم)\s*(?:عدد\s*)?(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u,
     /(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u
   ];
@@ -385,10 +385,10 @@ function availabilityRoute(raw       ){
 // Only explicit vehicle availability counts; fuel, cargo and advances may also be available.
 function hasAvailableVehicle(raw){
  const n=normalize(raw);
- const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا|تك|انتر|بورتر)';
+ const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا|تك|انتر|بورتر|جنابي)';
  const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
  const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?(?:(?:هنداي|هيونداي|كيا|ايسوزو)\\s*)?';
- const seekingLoad=/(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
+ const seekingLoad=/(?:^|[^\p{L}])لعندو\s+شي(?=$|[^\p{L}])|(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
  const explicitLoadSearch=/(?:^|[^\p{L}])(?:يلي|اللي|الي|مين)\s+(?:عندو|عنده)\s+(?:حمل|حموله|حمولة)(?=$|[^\p{L}])/u.test(n);
  const explicitVehicle=new RegExp('(?:^|[^\\p{L}])'+vehicle+'(?=$|[^\\p{L}])','u').test(n);
  const sale=/للبيع|للايجار|للإيجار|شراء|مطلوب\s*شراء/u.test(n);
@@ -409,17 +409,18 @@ function englishLabeledFreight(raw){
  const text=String(raw||'');
  const fromLabels=[...text.matchAll(/\bloading\s+location\s*:\s*([^\r\n]+)/gi)];
  const toLabels=[...text.matchAll(/\bunloading\s+location\s*:\s*([^\r\n]+)/gi)];
- if(fromLabels.length!==1||toLabels.length!==1)return text;
+ const plain=text.trim().match(/^([a-z ]+?)\s+to\s+([a-z ]+)(?=\r?\n|$)/i);
+ if((fromLabels.length!==1||toLabels.length!==1)&&!plain)return text;
  const cities={
-  jeddah:'جدة',jedda:'جدة',riyadh:'الرياض','riyadh sulai':'الرياض',
+  'rabigh port':'ميناء رابغ',rabigh:'رابغ',jeddah:'جدة',jedda:'جدة',riyadh:'الرياض','riyadh sulai':'الرياض',
   dammam:'الدمام',mecca:'مكة',makkah:'مكة',medina:'المدينة',madinah:'المدينة',
   dubai:'دبي','abu dhabi':'أبوظبي',doha:'الدوحة',kuwait:'الكويت',
   damascus:'دمشق',aleppo:'حلب',qamishli:'القامشلي',amman:'عمان',baghdad:'بغداد'
  };
  const city=value=>cities[value.toLowerCase().replace(/[📌📍]/gu,'').replace(/\s+/g,' ').trim()];
- const from=city(fromLabels[0][1]),to=city(toLabels[0][1]);
+ const from=city(plain?plain[1]:fromLabels[0][1]),to=city(plain?plain[2]:toLabels[0][1]);
  if(!from||!to||/\b(?:for sale|truck sales)\b/i.test(text))return text;
- const weightMatch=text.match(/\bweight\s*:\s*(\d+(?:\.\d+)?)\s*(?:tons?|tonnes?|mt)\b/i);
+ const weightMatch=text.match(/\b(?:weight\s*:\s*)?(\d+(?:\.\d+)?)\s*(?:tons?|tonnes?|mt)\b/i);
  return 'تحميل من '+from+' إلى '+to+'\n'+text+
   (/\bcontainers?\b/i.test(text)?'\nحاويات':'')+
   (weightMatch?'\nوزن '+weightMatch[1]+' طن':'');
@@ -935,7 +936,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'freight-multiroute-20261011',channelBrand,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'freight-english-20261011',channelBrand,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
