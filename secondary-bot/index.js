@@ -353,9 +353,30 @@ function primaryFreightText(raw){
  const first=text.slice(0,starts[1].index).trim();
  return explicitRoute(first)?first:text;
 }
+// Interpret explicit English loading labels; keep return instructions in original notes.
+function englishLabeledFreight(raw){
+ const text=String(raw||'');
+ const fromLabels=[...text.matchAll(/\bloading\s+location\s*:\s*([^\r\n]+)/gi)];
+ const toLabels=[...text.matchAll(/\bunloading\s+location\s*:\s*([^\r\n]+)/gi)];
+ if(fromLabels.length!==1||toLabels.length!==1)return text;
+ const cities={
+  jeddah:'جدة',jedda:'جدة',riyadh:'الرياض','riyadh sulai':'الرياض',
+  dammam:'الدمام',mecca:'مكة',makkah:'مكة',medina:'المدينة',madinah:'المدينة',
+  dubai:'دبي','abu dhabi':'أبوظبي',doha:'الدوحة',kuwait:'الكويت',
+  damascus:'دمشق',aleppo:'حلب',qamishli:'القامشلي',amman:'عمان',baghdad:'بغداد'
+ };
+ const city=value=>cities[value.toLowerCase().replace(/[📌📍]/gu,'').replace(/\s+/g,' ').trim()];
+ const from=city(fromLabels[0][1]),to=city(toLabels[0][1]);
+ if(!from||!to||/\b(?:for sale|truck sales)\b/i.test(text))return text;
+ const weightMatch=text.match(/\bweight\s*:\s*(\d+(?:\.\d+)?)\s*(?:tons?|tonnes?|mt)\b/i);
+ return 'تحميل من '+from+' إلى '+to+'\n'+text+
+  (/\bcontainers?\b/i.test(text)?'\nحاويات':'')+
+  (weightMatch?'\nوزن '+weightMatch[1]+' طن':'');
+}
+
 function parse(rawText       ,fallbackContact            =null){
   const text=String(rawText||"").trim();
-  const freightText=primaryFreightText(text);
+  const freightText=primaryFreightText(englishLabeledFreight(text));
   const n=normalize(freightText);
   const availabilityHint=hasAvailableVehicle(freightText);
   const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا|ني)?|لازم(?:نا|ني)|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:(?:\d+|تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?)\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
