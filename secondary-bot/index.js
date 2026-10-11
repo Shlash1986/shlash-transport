@@ -100,7 +100,7 @@ function placeBoundary(text,index){
 function canonicalPlace(city){return ({'حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
-function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
+function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
 const cargoWords=["قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
@@ -338,10 +338,11 @@ function hasAvailableVehicle(raw){
  const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا)';
  const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
  const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?';
- const seekingLoad=/(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)/u.test(n);
+ const seekingLoad=/(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
+ const explicitLoadSearch=/(?:^|[^\p{L}])(?:يلي|اللي|الي|مين)\s+(?:عندو|عنده)\s+(?:حمل|حموله|حمولة)(?=$|[^\p{L}])/u.test(n);
  const explicitVehicle=new RegExp('(?:^|[^\\p{L}])'+vehicle+'(?=$|[^\\p{L}])','u').test(n);
  const sale=/للبيع|للايجار|للإيجار|شراء|مطلوب\s*شراء/u.test(n);
- if(seekingLoad&&explicitVehicle&&!sale&&trainedFreightRoute(raw,true))return true;
+ if(!sale&&trainedFreightRoute(raw,true)&&((seekingLoad&&explicitVehicle)||explicitLoadSearch))return true;
  return new RegExp('(?:^|[^\\p{L}])(?:'+state+gap+vehicle+'|'+vehicle+gap+state+'|(?:عندي|يوجد)'+gap+vehicle+')(?=$|[^\\p{L}]|ب(?=[\\p{L}]))','u').test(n);
 }
 // An ad may list several jobs. Extract the first complete loading clause,
@@ -404,7 +405,7 @@ function parse(rawText       ,fallbackContact            =null){
   if(cg!=="حمولة غير محددة")confidence+=0.04;
   if(wanted)confidence+=0.06;
   confidence=Math.min(0.99,Number(confidence.toFixed(2)));
-  const enoughFreightSignal=Boolean(tr||hasVehicle||cg!=="حمولة غير محددة");
+  const enoughFreightSignal=Boolean(tr||hasVehicle||availabilityHint||cg!=="حمولة غير محددة");
   const publishable=Boolean(enoughFreightSignal&&(truckAvailable||wanted)&&rt&&fc&&(toc||truckAvailable)&&ph&&(truckAvailable?confidence>=0.7:confidence>=0.86));
   return {kind:truckAvailable?"truck_available":wanted?"load":"unknown",publishable,confidence,reason:publishable?null:truckAvailable?"truck_availability_incomplete":!wanted?"not_a_freight_request":!rt?"route_missing":!fc||!toc?"country_inference_missing":!ph?"contact_number_missing":!enoughFreightSignal?"freight_details_missing":"confidence_below_threshold",load:rt?{transport_scope:fc===toc?"local":"international",load_mode:"FTL",from_country:fc,from_city:rt.from_city,to_country:toc,to_city:rt.to_city==="غير محدد"?null:rt.to_city,cargo_type:cg,weight_tons:wt,required_trailer_type:tr||"غير محدد",trucks_required:tc,contact_phone:ph,contact_whatsapp:ph,posted_on_behalf:true,notes:text.slice(0,1200),status:"open",load_kind:"cargo",ad_duration_days:1,contact_visibility:"registered"}:null};
 }
@@ -785,7 +786,7 @@ async function connect(authDir=dir,candidate=false){
        if(!originalText)continue;
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
        const sender=m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
-       const senderPhone=contactFromJid(sender)||(isFreightCandidate(originalText)?await resolveSenderPhone(sock,m):null);
+       const senderPhone=contactFromJid(sender)||((isFreightCandidate(originalText)||hasAvailableVehicle(originalText))?await resolveSenderPhone(sock,m):null);
        const parts=freightParts(originalText,senderPhone);
        for(let partIndex=0;partIndex<parts.length;partIndex++){
        const text=parts[partIndex];
