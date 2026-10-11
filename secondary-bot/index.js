@@ -7,7 +7,7 @@ function add(c       , cities         ){ for(const city of cities) cityCountry.s
 add("سوريا",["دمشق","الشام","شام","عين عاروس","عين عروس","عين العروس","حلب","إدلب","ادلب","سرمدا","باب الهوى","معبر باب الهوى","باب السلامة","باب السلام","معبر باب السلام","جرابلس","الباب","الرقة","الحسكة","القامشلي","تدمر","حمص","حماة","حماه","طرطوس","بانياس","دير الزور","ديرالزور","اليعربية","اليعروبية","ساحة التبادل اليعربية","ساحة تبادل اليعربية","التنف","البوكمال","تل أبيض","رأس العين","خان العسل","نصيب","معبر نصيب","الدرباسية","رميلان","منبج","عفرين","عدرا","القحطانية","تل تمر","تل حميس"]);
 add("الأردن",["عمان","عمّان","جابر","معبر جابر","الرمثا","الزرقاء","العقبة","المعبر الشمالي","الشيخ حسين","سحاب","الأزرق","إربد","اربد"]);
 add("العراق",["بغداد","البصرة","الموصل","أربيل","اربيل","كركوك","ربيعة","القائم","كبيسة","الوليد","طريبيل","زرباطية","سنجار","بيجي","النجف","تكريت","سامراء","دهوك","السماوة","الحلة"]);
-add("السعودية",["الرياض","جدة","جده","الدمام","الجبيل","جبيل","جيزان","جازان","مكة","مكه","المدينة","المدينه","تبوك","خميس مشيط","القصيم","قصيم","سدير","صعبر","ينبع","الطائف","حائل","بريدة","بريده","عنيزة","عنيزه","الخبر","الاحساء","الأحساء","نجران","أبها","ابها","حفر الباطن","حفرالباطن"]);
+add("السعودية",["الرياض","جدة","جده","الدمام","الجبيل","جبيل","جيزان","جازان","مكة","مكه","المدينة","المدينه","تبوك","خميس مشيط","القصيم","قصيم","سدير","صعبر","ينبع","الطائف","حائل","بريدة","بريده","عنيزة","عنيزه","الخبر","الاحساء","الأحساء","نجران","أبها","ابها","حفر الباطن","حفرالباطن","رنية","الخرمة"]);
 add("الإمارات",["دبي","أبوظبي","ابوظبي","الشارقة","الشارقه","العين"]);
 add("لبنان",["بيروت","طرابلس لبنان","البقاع","شتورا"]);
 add("عُمان",["مسقط","صلالة","صلاله"]);
@@ -105,7 +105,7 @@ function canonicalPlace(city){return ({'عزاز':'أعزاز','اعزاز':'أ�
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
-const cargoWords=["حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
+const cargoWords=["مياه","اكياس جامبو","حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
   const m=a.length,n=b.length;
@@ -186,8 +186,30 @@ function labeledRoute(text){
  const [from]=fields.from,[to]=fields.to;
  return {from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country};
 }
+// Keep a same-origin destination list in one ad, preserving the total truck count.
+function multiDestinationRoute(text){
+ const lines=String(text||'').split(/[\r\n]+/u).map(normalize).filter(Boolean);
+ let from=null, destinations=[], collecting=false;
+ for(const line of lines){
+  const m=line.match(/(?:^|\s)(?:و)?من\s+(.+?)\s+(?:الى|الي|على|علي)\s*[:：]?\s*(.*)$/u);
+  if(m){
+   const origin=explicitEndpoint(m[1]);
+   if(!origin||from&&(origin.city!==from.city||origin.country!==from.country))return null;
+   from=origin;collecting=true;
+   if(m[2]){const to=explicitEndpoint(m[2]);if(!to)return null;destinations.push(to);}
+  }else if(collecting){
+   const to=explicitEndpoint(line);
+   if(to)destinations.push(to);
+   else if(/^(?:الوزن|وزن|التواصل|للتواصل|التحميل|الحموله|الحمولة|\+?\d)/u.test(line))collecting=false;
+   else return null;
+  }
+ }
+ if(!from||destinations.length<2||destinations.length>8||!destinations.every(d=>d.country===destinations[0].country))return null;
+ return {from_city:from.city,from_country:from.country,to_city:[...new Set(destinations.map(d=>d.city))].join(' / '),to_country:destinations[0].country};
+}
 function route(text){
  const labeled=labeledRoute(text);if(labeled!==undefined)return labeled;
+ const multiple=multiDestinationRoute(text);if(multiple)return multiple;
  const explicit=explicitRoute(text);if(explicit)return explicit;
  const n=geographyText(text), hits=[];
  for(const [city] of cityCountry){let pos=n.indexOf(city);while(pos>=0){
@@ -344,7 +366,7 @@ function trainedFreightRoute(raw       ,available        ){
 function availableAreaRoute(raw){
  const n=geographyText(raw);
  if(!/(?:جميع|كافه|كافة|كل)\s+(?:المحافظات|المناطق)/u.test(n))return null;
- const m=n.match(/(?:فاضي(?:ة|ه)?|فارغ(?:ة|ه)?)\s*(?:ب|في\s+)([\p{L}\s+\/]+?)(?=\s+(?:الله|الى|الي|الا|لجميع|لكافة|لكافه|لكل)|$)/u);
+ const m=n.match(/(?:فاضي(?:ة|ه)?|فارغ(?:ة|ه)?)\s*(?:ب|في\s+)([\p{L}\s+\/]+?)(?=\s+(?:الله|نقل|الى|الي|الا|على|لجميع|لكافة|لكافه|لكل)|$)/u);
  if(!m)return null;
  const places=m[1].trim().split(/\s*[+\/]\s*/u).map(explicitEndpoint);
  if(!places.length||places.length>3||places.some(p=>!p)||!places.every(p=>p.country===places[0].country))return null;
@@ -365,7 +387,7 @@ function hasAvailableVehicle(raw){
  const n=normalize(raw);
  const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا|تك|انتر|بورتر)';
  const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
- const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?';
+ const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?(?:(?:هنداي|هيونداي|كيا|ايسوزو)\\s*)?';
  const seekingLoad=/(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
  const explicitLoadSearch=/(?:^|[^\p{L}])(?:يلي|اللي|الي|مين)\s+(?:عندو|عنده)\s+(?:حمل|حموله|حمولة)(?=$|[^\p{L}])/u.test(n);
  const explicitVehicle=new RegExp('(?:^|[^\\p{L}])'+vehicle+'(?=$|[^\\p{L}])','u').test(n);
@@ -773,8 +795,12 @@ async function connect(authDir=dir,candidate=false){
  const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
- let groupRefreshTimer=null;
- sock.ev.on('groups.upsert',()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},1000);});
+ let groupRefreshTimer=null,periodicGroupTimer=null;
+ const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},1000);};
+ const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},300000);periodicGroupTimer.unref?.();};
+ sock.ev.on('groups.upsert',scheduleGroupRefresh);
+ sock.ev.on('groups.update',scheduleGroupRefresh);
+ sock.ev.on('group-participants.update',scheduleGroupRefresh);
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){if(candidate){replacementQr=nextQR;replacementStatus='scan';}else{qr=nextQR;status='scan';}}
    if(connection==='open'){
@@ -787,8 +813,10 @@ async function connect(authDir=dir,candidate=false){
       if(previous&&previous!==sock)previous.end(new Error('Account replaced by owner'));
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
+    if(periodicGroupTimer)clearTimeout(periodicGroupTimer);periodicRefresh();
     qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
+    if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
     if(selected){qr='';status='disconnected';}
@@ -907,7 +935,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'freight-transit-20261011',channelBrand,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'freight-multiroute-20261011',channelBrand,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');

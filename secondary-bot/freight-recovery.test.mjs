@@ -5,6 +5,10 @@ import {isFreightCandidate} from './ai-runtime.mjs';
 const source=fs.readFileSync(new URL('./index.js',import.meta.url),'utf8').split('import makeWASocket,')[0].replace(/^import .*;$/gm,'');
 const api=vm.runInNewContext(source+';({parse,resolveSenderPhone,contactFromJid,validateAIParse})');
 const cases=[
+ ['مطلوب سطحات نقل اكياس جامبو\nمن ينبع الى :\nالدمام\nالرياض\nحفر الباطن\nالوزن نضامي ٢٤ طن\nالتواصل واتس اب /\n0557905264\n0553034136','+966557905264','load','ينبع','الدمام / الرياض / حفر الباطن',24],
+ ['مطلوب سطحتين او ستارتين\nمن جيزان الى رنية\nومن جيزان الى الخرمة\nالوزن 26\n0570475675','+966570475675','load','جيزان','رنية / الخرمة',null],
+ ['السلام عليكم سياره\nهنداي فاضيه في\nالراعي نقل عفش على\nجميع المحافظات','+905539496493','truck_available','الراعي',null,null],
+ ['مطلوب ستاير أو سطحات\nمن حايل إلى الرياض\nالتحميل مياه','+966564360854','load','حائل','الرياض',null],
  ['مطلوب براد تحميل بيض بدون تبريد حصران من باب الهوى الي الموصل طريق التنف يلي جاهز يحكي معي تحميل مباشر 0991438195','+963991438195','load','باب الهوى','الموصل',null],
  ['حمل حمضيات من اللاذقية على دبي ترانزيت','+963991898478','load','اللاذقية','دبي',null],
  ['مطلوب براد الحمل بطاطة 18- من باب الهوى ع جابر','+963957724996','load','باب الهوى','جابر',null],
@@ -44,4 +48,7 @@ const sock={groupMetadata:async()=>({participants:[
 ]})};
 assert.equal(await api.resolveSenderPhone(sock,msg),'+963951762710');
 assert.equal(await api.resolveSenderPhone(sock,{key:{remoteJid:'test@g.us',participant:'888888888888888@lid'}}),null);
-console.log('PASS: 6 freight cases, ambiguous routes, sales, missing contacts, sender identity and colloquial candidate');
+console.log('PASS: screenshot freight cases, ambiguous routes, sales, missing contacts, sender identity and colloquial candidate');
+
+assert.equal(api.parse(cases[1][0],cases[1][1]).load.trucks_required,2);
+assert.equal(api.parse(cases[3][0],cases[3][1]).load.cargo_type,'مياه');
