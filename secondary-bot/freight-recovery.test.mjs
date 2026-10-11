@@ -5,6 +5,7 @@ import {isFreightCandidate} from './ai-runtime.mjs';
 const source=fs.readFileSync(new URL('./index.js',import.meta.url),'utf8').split('import makeWASocket,')[0].replace(/^import .*;$/gm,'');
 const api=vm.runInNewContext(source+';({parse,resolveSenderPhone,contactFromJid,validateAIParse})');
 const cases=[
+ ['سلام عليكم انتر فاضيه بعزاز +عفرين الله يرزق الا جميع المحافظات','+963962483625','truck_available','أعزاز / عفرين',null,null],
  ['مطلوب سيارة تحمل\nكياس ملح من\nالعشارة لمعرة مصرين','+963986266492','load','العشارة','معرة مصرين',null],
  ['🚛 مطلوب سطحات\n📍 التحميل: الدمام\n📍 التنزيل: عفيف\n⚖️ الحمولة: حديد تيوبات\n💰 الدفع: تحويل بعد التنزيل و تصوير الفاتورة فقط\n⚖️ الوزن: 23/ طن','+966501003744','load','الدمام','عفيف',23],
  ['سلام عليكم\nلازمنا تك بيشيل ١٠ طن\nمن اعزاز شمارين على حلب','+963951762710','load','اعزاز شمارين','حلب',10],
@@ -28,7 +29,7 @@ for(const text of [
  'مطلوب تك بيشيل 10 طن'
 ])assert.equal(api.parse(text,'+963951762710').publishable,false,text);
 assert.equal(api.parse(cases[2][0]).publishable,false);
-assert.equal(isFreightCandidate(cases[2][0]),true);
+assert.equal(isFreightCandidate('لازمنا تك يشيل 10 طن'),true);
 assert.equal(isFreightCandidate('سلامتك'),false);
 assert.equal(api.contactFromJid('123456789012345@lid'),null);
 const msg={key:{remoteJid:'test@g.us',participant:'123456789012345@lid'}};

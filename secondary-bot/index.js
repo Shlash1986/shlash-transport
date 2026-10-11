@@ -91,17 +91,17 @@ add("سوريا",["حما"]);
 add("سوريا",["لاذقيه","اللاذقيه"]);
 add("السعودية",["العلا"]);
 // Places in rejected freight ads; compound origins retain the specific loading village.
-add("سوريا",["العشارة","معرة مصرين","معره مصرين","شمارين","أعزاز شمارين","اعزاز شمارين"]);
+add("سوريا",["عزاز","العشارة","معرة مصرين","معره مصرين","شمارين","أعزاز شمارين","اعزاز شمارين"]);
 add("السعودية",["عفيف"]);
 add("سوريا",["قحطانيه","قحطانية"]);
 add("سوريا",["باب الهوه","اليعروبيه","اليعربيه","سوق الصالحية بدير الزور"]);
 trailers.unshift([/(?:^|[^\p{L}])ستار(?=$|[^\p{L}])/u,"ستارة"],[/(?:ستارتين)/u,"ستارة"],[/(?:سطحتين)/u,"سطحة"]);
-trailers.unshift([/(?:^|[^\p{L}])تك(?=$|[^\p{L}])/u,"تك"]);
+trailers.unshift([/(?:^|[^\p{L}])تك(?=$|[^\p{L}])/u,"تك"],[/(?:^|[^\p{L}])انتر(?=$|[^\p{L}])/u,"انتر"]);
 function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){return ({'حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
+function canonicalPlace(city){return ({'عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
@@ -341,6 +341,15 @@ function trainedFreightRoute(raw       ,available        ){
  if(available)return {from_city:canonicalPlace(first.city),to_city:"غير محدد"};
  return null;
 }
+function availableAreaRoute(raw){
+ const n=geographyText(raw);
+ if(!/(?:جميع|كافه|كافة|كل)\s+(?:المحافظات|المناطق)/u.test(n))return null;
+ const m=n.match(/(?:فاضي(?:ة|ه)?|فارغ(?:ة|ه)?)\s*(?:ب|في\s+)([\p{L}\s+\/]+?)(?=\s+(?:الله|الى|الي|الا|لجميع|لكافة|لكافه|لكل)|$)/u);
+ if(!m)return null;
+ const places=m[1].trim().split(/\s*[+\/]\s*/u).map(explicitEndpoint);
+ if(!places.length||places.length>3||places.some(p=>!p)||!places.every(p=>p.country===places[0].country))return null;
+ return {from_city:places.map(p=>p.city).join(' / '),from_country:places[0].country,to_city:'غير محدد',to_country:places[0].country};
+}
 function availabilityRoute(raw       ){
   const n=normalize(raw);
   const origin=n.match(/(?:في|بال|من|عندي في)\s*(الشام|دمشق|حلب|ادلب|القامشلي|حمص|الرياض|جدة|الدمام)(?=\s|$|،|,)/u)?.[1];
@@ -354,7 +363,7 @@ function availabilityRoute(raw       ){
 // Only explicit vehicle availability counts; fuel, cargo and advances may also be available.
 function hasAvailableVehicle(raw){
  const n=normalize(raw);
- const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا)';
+ const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا|تك|انتر|بورتر)';
  const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
  const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?';
  const seekingLoad=/(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
@@ -401,7 +410,7 @@ function parse(rawText       ,fallbackContact            =null){
   const availabilityHint=hasAvailableVehicle(freightText);
   const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا|ني)?|لازم(?:نا|ني)|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:(?:\d+|تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?)\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
   const truckAvailable=!vehicleRequest&&availabilityHint;
-  const rt=route(freightText)||(truckAvailable?trainedFreightRoute(freightText,true):null);
+  const rt=(truckAvailable?availableAreaRoute(freightText):null)||route(freightText)||(truckAvailable?trainedFreightRoute(freightText,true):null);
   if(rt?.from_city==='حما')rt.from_city='حماة';
   if(rt?.to_city==='حما')rt.to_city='حماة';
   const rawPh=phone(text);
