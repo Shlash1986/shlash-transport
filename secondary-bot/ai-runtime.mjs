@@ -5,7 +5,7 @@ const properties={publish:{type:'boolean'},kind:{type:'string',enum:['load','tru
 let lastStatus='not_configured',requests=0,accepted=0,windowAt=Date.now(),windowCalls=0,inFlight=0;
 const cache=new Map();
 export function getAIStatus(){return {status:process.env.AI_ENABLED!=='true'?'disabled':!process.env.OPENAI_API_KEY?'not_configured':lastStatus==='not_configured'?'configured_unverified':lastStatus,requests,accepted,model:process.env.OPENAI_MODEL||'gpt-4o-mini'};}
-export function isFreightCandidate(text){return /شحن|حمول|تحميل|براد|ستار|سطح|تريل|شاحن|قلاب|دينا|سيار|freight|truck|flatbed|reefer|cargo/iu.test(text);}
+export function isFreightCandidate(text){return /شحن|حمول|تحميل|براد|ستار|سطح|تريل|شاحن|قلاب|دينا|سيار|(?:^|[^\p{L}])(?:تك|انتر|بورتر)(?=$|[^\p{L}])|freight|truck|flatbed|reefer|cargo/iu.test(text);}
 export async function extractFreightAd(message,{apiKey=process.env.OPENAI_API_KEY,fetchImpl=fetch}={}){
  const text=String(message||'').trim().slice(0,4000);
  if(process.env.AI_ENABLED!=='true'||!apiKey||!isFreightCandidate(text))return null;
@@ -31,3 +31,4 @@ export async function extractFreightAd(message,{apiKey=process.env.OPENAI_API_KE
  }catch{lastStatus='request_failed';return null;}
  finally{inFlight--;}
 }
+
