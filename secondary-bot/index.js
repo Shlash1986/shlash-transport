@@ -719,6 +719,7 @@ async function syncChannelBrand(sock,metadata){
 }
 
 let groupRefreshInFlight=false;
+let groupRefreshCooldownUntil=0;
 const verifiedRequestedGroups=new Map();
 async function verifyRequestedMembership(sock,info){
  try{
@@ -732,7 +733,7 @@ async function verifyRequestedMembership(sock,info){
  return false;
 }
 async function refreshJoinedGroups(sock,joinRequested=false){
- if(activeSocket!==sock||groupRefreshInFlight)return;
+ if(activeSocket!==sock||groupRefreshInFlight||Date.now()<groupRefreshCooldownUntil)return;
  if(replacementPhone&&String(sock.user?.id||'').split('@')[0].split(':')[0]!==replacementPhone)return;
  groupRefreshInFlight=true;
  try{
@@ -761,7 +762,7 @@ async function refreshJoinedGroups(sock,joinRequested=false){
   groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;groupCheckError='';
   console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));
   console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));
- }catch(e){groupCheckError=String(e);console.error('Group refresh failed',String(e));}
+ }catch(e){groupCheckError=String(e);if(/rate.overlimit|rate-overlimit|429/i.test(groupCheckError))groupRefreshCooldownUntil=Date.now()+60*60*1000;console.error('Group refresh failed',String(e));}
  finally{groupRefreshInFlight=false;}
 }
 
