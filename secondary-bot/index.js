@@ -223,7 +223,18 @@ function repeatedOriginRoute(text){
  if(!pairs.every(p=>p.from.city===first.from.city&&p.from.country===first.from.country&&p.to.country===first.to.country))return null;
  return {from_city:first.from.city,from_country:first.from.country,to_city:[...new Set(pairs.map(p=>p.to.city))].join(' / '),to_country:first.to.country};
 }
+function countryOnlyDestinationRoute(text){
+ const n=normalize(text);
+ const match=n.match(/(?:^|\\s)من\\s+([^\\n،,]{2,45}?)\\s+(?:الى|الي|على|ع)\\s+([^\\n،,]{2,45})/u);
+ if(!match)return null;
+ const from=explicitEndpoint(match[1].trim());
+ const destination=match[2].trim();
+ const to=explicitEndpoint(destination);
+ if(!from||!to||to.city!=='غير محددة')return null;
+ return {from_city:from.city,from_country:from.country,to_city:'غير محددة',to_country:to.country};
+}
 function route(text){
+ const countryOnly=countryOnlyDestinationRoute(text);if(countryOnly)return countryOnly;
  const labeled=labeledRoute(text);if(labeled!==undefined)return labeled;
  const repeated=repeatedOriginRoute(text);if(repeated)return repeated;
  const multiple=multiDestinationRoute(text);if(multiple)return multiple;
