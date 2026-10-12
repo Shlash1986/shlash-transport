@@ -604,6 +604,23 @@ import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysocke
 import QRCode from 'qrcode';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
 import http from 'node:http';
+
+// Retry only explicit PostgreSQL transaction rollbacks; uncertain network outcomes
+// must not be retried here because they may already have committed.
+async function ingestFreight(rpc,body,{fetchImpl=fetch,sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}){
+ for(let attempt=0;attempt<3;attempt++){
+  const response=await fetchImpl(process.env.SUPABASE_URL+'/rest/v1/rpc/'+rpc,{method:'POST',signal:AbortSignal.timeout(20000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},body:JSON.stringify(body)});
+  const result=await response.text();
+  let code;try{code=JSON.parse(result).code;}catch{}
+  if(!response.ok&&['57014','40001','40P01'].includes(code)&&attempt<2){
+   console.warn('Ingest transaction retry',JSON.stringify({rpc,code,attempt:attempt+1}));
+   await sleep(1000*(attempt+1));
+   continue;
+  }
+  return {response,result};
+ }
+}
+
 let numberedChannelQueue=Promise.resolve();
 async function publicationNumber(adId,action='reserve',messageId=null){
  const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/whatsapp_publication_number',{
@@ -626,7 +643,7 @@ function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
   if(!reference?.ready)throw new Error('Publication numbering initialization pending');
   if(reference.already_sent)return null;
   if(!Number.isSafeInteger(reference.ad_number)||reference.ad_number<3000||!Number.isInteger(reference.daily_number)||reference.daily_number<1||!/^\d{4}-\d{2}-\d{2}$/.test(reference.day))throw new Error('Invalid publication reference');
-  const sent=await sock.sendMessage(channel,{text:formatChannelAd(parsed,text,reference)});
+  const sent=await sock.sendMessage(channel,{text:formatChannelAd(parsed,text,reference),linkPreview:null});
   if(!sent?.key?.id)throw new Error('Channel message ID missing');
   console.log('Channel publication sent',JSON.stringify({sourceId,channel,messageId:sent.key.id,adId,...reference}));
   // A failed receipt update must never cause a second WhatsApp send.
@@ -807,7 +824,7 @@ async function publishRequestedChannelPost(sock){
  catch(e){if(e.code==='EEXIST'){try{manualPublication=JSON.parse(await readFile(receipt,'utf8'));}catch{}return;}throw e;}
  manualPublication={id:task.id,status:'sending'};
  try{
-   const sent=await sock.sendMessage(resolvedChannelJid,{text:task.text});
+   const sent=await sock.sendMessage(resolvedChannelJid,{text:task.text,linkPreview:null});
    if(!sent?.key?.id)throw new Error('No WhatsApp message ID returned');
    manualPublication={id:task.id,status:'sent',messageId:sent.key.id,at:new Date().toISOString()};
    await writeFile(receipt,JSON.stringify(manualPublication));
@@ -908,8 +925,7 @@ async function connect(authDir=dir,candidate=false){
        const body={p_token:process.env.TRUCKLINK_INGEST_TOKEN,p_group_jid:jid,p_message_id:messageId,p_sender_hash:createHash('sha256').update(String(sender)).digest('hex').slice(0,24),p_text:text.slice(0,4000),p_received_at:new Date(Number(m.messageTimestamp||Date.now()/1000)*1000).toISOString(),p_parsed:finalParsed,p_confidence:finalParsed.confidence,p_publish:shouldPublish};
        if(isTruck)delete body.p_publish;
        const rpc=isTruck?'publish_whatsapp_truck_available':'ingest_whatsapp_pilot';
-       const response=await fetch(process.env.SUPABASE_URL+'/rest/v1/rpc/'+rpc,{method:'POST',signal:AbortSignal.timeout(20000),headers:{apikey:process.env.SUPABASE_ANON_KEY,Authorization:'Bearer '+process.env.SUPABASE_ANON_KEY,'content-type':'application/json'},body:JSON.stringify(body)});
-       const result=await response.text();
+       const {response,result}=await ingestFreight(rpc,body);
        if(!response.ok){lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
        const outcome=JSON.parse(result);
        console.log('Freight ingest result',JSON.stringify({id:messageId,...outcome}));
