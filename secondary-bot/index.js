@@ -207,8 +207,25 @@ function multiDestinationRoute(text){
  if(!from||destinations.length<2||destinations.length>8||!destinations.every(d=>d.country===destinations[0].country))return null;
  return {from_city:from.city,from_country:from.country,to_city:[...new Set(destinations.map(d=>d.city))].join(' / '),to_country:destinations[0].country};
 }
+// Read repeated origin-to-destination lines as one multi-stop freight request.
+// Only accept fully known places; never guess an unknown destination.
+function repeatedOriginRoute(text){
+ const rows=String(text||'').split(/[\\r\\n]+/u).map(line=>normalize(line).replace(/^[^\\p{L}\\p{N}]+|[^\\p{L}\\p{N}]+$/gu,'').trim());
+ const pairs=[];
+ for(const line of rows){
+  const m=line.match(/^من\\s+(.+?)\\s+(?:الى|الي)\\s+(.+)$/u);
+  if(!m)continue;
+  const from=explicitEndpoint(m[1]),to=explicitEndpoint(m[2]);
+  if(from&&to)pairs.push({from,to});
+ }
+ if(pairs.length<2||pairs.length>12)return null;
+ const first=pairs[0];
+ if(!pairs.every(p=>p.from.city===first.from.city&&p.from.country===first.from.country&&p.to.country===first.to.country))return null;
+ return {from_city:first.from.city,from_country:first.from.country,to_city:[...new Set(pairs.map(p=>p.to.city))].join(' / '),to_country:first.to.country};
+}
 function route(text){
  const labeled=labeledRoute(text);if(labeled!==undefined)return labeled;
+ const repeated=repeatedOriginRoute(text);if(repeated)return repeated;
  const multiple=multiDestinationRoute(text);if(multiple)return multiple;
  const explicit=explicitRoute(text);if(explicit)return explicit;
  const n=geographyText(text), hits=[];
