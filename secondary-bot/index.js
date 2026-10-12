@@ -798,11 +798,11 @@ async function connect(authDir=dir,candidate=false){
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
  let groupRefreshTimer=null,periodicGroupTimer=null;
- const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},1000);};
- const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},300000);periodicGroupTimer.unref?.();};
+ const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},60000);};
+ const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},1800000);periodicGroupTimer.unref?.();};
  sock.ev.on('groups.upsert',scheduleGroupRefresh);
  sock.ev.on('groups.update',scheduleGroupRefresh);
- sock.ev.on('group-participants.update',scheduleGroupRefresh);
+ // Membership changes are handled by periodic refresh to avoid WhatsApp metadata rate limits.
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){if(candidate){replacementQr=nextQR;replacementStatus='scan';}else{qr=nextQR;status='scan';}}
    if(connection==='open'){
