@@ -32,3 +32,18 @@ const fuelOnly=api.parse('مازوت متوفر في كبيسة',contact);
 assert.notEqual(fuelOnly.kind,'truck_available');assert.equal(fuelOnly.publishable,false);
 assert.equal(api.validateAIParse(screenshot,{publish:true,kind:'truck_available',confidence:0.99,from_city:'كبيسة',from_country:'العراق',to_city:'بغداد',to_country:'العراق'},contact),null);
 console.log('PASS: screenshot, cargo availability, vehicle availability, multiple routes, channel heading and AI guard');
+// Regression: announcement 5561 must not turn Bab Salama into Ibb, Yemen.
+for(const border of ['باب سلامه','باب سلامة','باب السلامة','باب السلامه']){
+ const text='سلام عليكم مطلوب ستارات\nقاطرات و مقطورات\nصواني\nمن '+border+' الى جابر';
+ const p=api.parse(text,'+963999123456');
+ assert.equal(p.publishable,true,border);
+ assert.equal(p.load.from_city,'باب السلامة');
+ assert.equal(p.load.from_country,'سوريا');
+ assert.equal(p.load.to_city,'جابر');
+ assert.equal(p.load.to_country,'الأردن');
+ assert.equal(p.load.required_trailer_type,'ستارة أو قاطرة أو مقطورة أو صواني');
+ assert(!api.formatChannelAd(p,text).includes('كشف جنب'));
+}
+assert.equal(api.parse('مطلوب ستارة من إب إلى عدن','+967777123456').load.from_country,'اليمن');
+assert.equal(api.parse('مطلوب ستارة من باب مجهول إلى جابر','+963999123456').publishable,false);
+console.log('PASS: Bab Salama aliases, plural trailers and Ibb boundary regression');
