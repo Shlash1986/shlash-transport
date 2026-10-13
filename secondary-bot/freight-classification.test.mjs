@@ -47,3 +47,26 @@ for(const border of ['باب سلامه','باب سلامة','باب السلا�
 assert.equal(api.parse('مطلوب ستارة من إب إلى عدن','+967777123456').load.from_country,'اليمن');
 assert.equal(api.parse('مطلوب ستارة من باب مجهول إلى جابر','+963999123456').publishable,false);
 console.log('PASS: Bab Salama aliases, plural trailers and Ibb boundary regression');
+
+// Actual 5821 message: preserve the full Syrian border name, never match إب inside باب.
+for(const origin of ['باب لهوى','باب لهوا','باب لهوي','باب الهوى','باب الهوا']){
+ const text='براد يحمل مواد اولية من '+origin+' لنصيب';
+ const p=api.parse(text,'+963938827280');
+ assert.equal(p.publishable,true,text);
+ assert.equal(p.load.from_city,'باب الهوى');
+ assert.equal(p.load.from_country,'سوريا');
+ assert.equal(p.load.to_city,'نصيب');
+ assert.equal(p.load.transport_scope,'local');
+ assert.equal(p.load.cargo_type,'مواد أولية');
+ assert.equal(p.load.required_trailer_type,'براد');
+ assert.equal(p.load.weight_tons,null);
+ assert.equal(p.load.notes,text);
+}
+const yemen=api.parse('مطلوب براد من إب إلى عدن حمولة مواد أولية','+967777123456');
+assert.equal(yemen.publishable,true);
+assert.equal(yemen.load.from_country,'اليمن');
+assert.equal(yemen.load.to_city,'عدن');
+const saudi=api.parse('السلام عليكم يا شباب مطلوب سطحه من جده الى الخرج الوزن 20 طن 0940013772');
+assert.equal(saudi.load.from_city,'جدة');
+assert.equal(saudi.load.to_city,'الخرج');
+assert.equal(saudi.load.weight_tons,20);
