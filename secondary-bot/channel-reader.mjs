@@ -11,6 +11,15 @@ export function channelMessageId(message){
  const id=String(message.key?.server_id||message.server_id||message.key?.id||'');
  return id?'channel:'+id:null;
 }
+export async function fetchChannelMessages(sock,jid,count=100){
+ // Current WA Web request shape; the legacy message_updates IQ times out.
+ // WhiskeySockets/Baileys commit 5f1f1181d0a5534b4227b7619ac4dba5e5e76e92.
+ // Fetch the latest page and apply timestamp checkpoints locally. `before`
+ // and `after` are message cursors, not our Unix timestamp checkpoint.
+ const response=await sock.query({tag:'iq',attrs:{type:'get',to:'s.whatsapp.net',xmlns:'newsletter'},content:[{tag:'messages',attrs:{type:'jid',jid,count:String(count)}}]},15000);
+ if(!response||!Array.isArray(response.content)||!response.content.some(node=>node.tag==='messages'))throw new Error('Invalid channel messages response; checkpoint retained');
+ return response;
+}
 export function subscribedChannels(value){
  const found=new Map();
  function visit(node,depth=0){
@@ -115,7 +124,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
      // A one-minute overlap handles delayed notifications; stable IDs deduplicate it.
      const since=Math.max(seconds()-86400,checkpoint.floor,checkpoint.since-60);
      const pollStarted=seconds();
-     const response=await sock.newsletterFetchMessages(jid,100,since);
+     const response=await fetchChannelMessages(sock,jid,100);
      const messages=decodeChannelMessages(response,jid).filter(m=>m.messageTimestamp>=since&&m.messageTimestamp<=seconds()+60);
      if(messages.length>=100)throw new Error('Channel poll reached 100-message limit; checkpoint retained');
      if(messages.length){
