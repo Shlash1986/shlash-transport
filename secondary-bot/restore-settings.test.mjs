@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
+import {acceptsFreightSource,isChannelJid,channelMessageId} from './channel-reader.mjs';
+const createChannelReader=()=>({state:{enabled:true,status:'test'},start(){},stop(){}});
 import {isFreightCandidate} from './ai-runtime.mjs';
 const filename=process.argv[2]||'index.js';
 let source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace("connect().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'').replace("startBot().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
@@ -9,7 +11,7 @@ const callbacks={},requests=[],sent=[];
 let mode='success';
 let aiCalls=0;
 const sock={user:{id:'4368120528715:4@s.whatsapp.net'},groupMetadata:async()=>({participants:[{id:'99999999999999@lid',lid:'99999999999999@lid',jid:'963955111222@s.whatsapp.net'},{id:'88888888888888@lid',jid:'963955999888@s.whatsapp.net'}]}),ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
-const context=vm.createContext({console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
+const context=vm.createContext({createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
  const body=JSON.parse(opts.body);
  if(url.endsWith('whatsapp_publication_number'))return {ok:true,json:async()=>body.p_action==='confirm'?{ready:true,sent:true}:{ready:true,ad_number:3000+sent.length,daily_number:59+sent.length,day:'2026-10-10',already_sent:false}};
@@ -161,3 +163,27 @@ console.log('PASS: four independent requests, route/contact provenance, idempote
 
 assert(sent.every(x=>x.payload.text.includes('رقم الإعلان بالمنصة:')));
 assert(sent.every(x=>/إعلان اليوم \d+/.test(x.payload.text)));
+
+
+// Channel-to-platform-to-own-channel regression, including short server IDs.
+const channelAd='مطلوب صندوق تحميل من معبر نصيب إلى دبي نوع البضاعة البسة وزن الحمل 5 طن تواصل مسؤول النقل الخليجي نوح +963941103399';
+const beforeChannels=sent.length;
+const channelPost=message('7',channelAd,'120363400017474686@newsletter');
+channelPost.key.server_id='7';
+await upsert([channelPost]);
+assert.equal(sent.length,beforeChannels+1);
+assert.equal(requests.at(-1).body.p_message_id,'channel:7');
+assert.equal(requests.at(-1).body.p_parsed.load.from_city,'معبر نصيب');
+assert.equal(requests.at(-1).body.p_parsed.load.to_city,'دبي');
+assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,'+963941103399');
+assert.equal(requests.at(-1).body.p_parsed.load.weight_tons,5);
+await upsert([channelPost,message('8',channelAd,'120363411206753203@newsletter'),message('FORWARDEDCHANNEL',channelAd,'123@g.us')]);
+assert.equal(sent.length,beforeChannels+1);
+await upsert([message('OWNCHANNEL',channelAd,'120363428757778414@newsletter'),message('CONFIGUREDCHANNEL',channelAd,'123@newsletter')]);
+assert.equal(sent.length,beforeChannels+1);
+const noContact=message('9','مطلوب براد من دمشق إلى دبي','120363400017474686@newsletter');
+await upsert([noContact]);assert.equal(sent.length,beforeChannels+1);
+assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,null);
+const expired=message('10',channelAd,'120363400017474686@newsletter');expired.messageTimestamp-=90000;
+const beforeExpired=requests.length;await upsert([expired]);assert.equal(requests.length,beforeExpired);
+console.log('PASS: Nassib-Dubai channel ad, server IDs, cross-source duplicates, own-channel exclusion, no invented contact and stale posts');

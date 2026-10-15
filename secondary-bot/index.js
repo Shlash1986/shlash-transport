@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId} from './channel-reader.mjs';
 import {extractFreightAd,getAIStatus,isFreightCandidate} from './ai-runtime.mjs';
 const ARABIC_DIGITS                        = { "٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9","۰":"0","۱":"1","۲":"2","۳":"3","۴":"4","۵":"5","۶":"6","۷":"7","۸":"8","۹":"9" };
 function normalize(input=""){ return String(input).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d).replace(/ـ/g,"").replace(/[إأآ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim(); }
@@ -761,6 +762,8 @@ if(replacementSession&&!/^[a-zA-Z0-9_-]{1,50}$/.test(replacementSession))throw n
 const replacementDir=replacementPhone?'/data/wa-session-'+replacementPhone+(replacementSession?'-'+replacementSession:''):null;
 let pendingSocket=null,replacementQr='',replacementCode='',replacementStatus=replacementPhone?'starting':'not_requested',codeRequestedAt=0;
 const messageDiagnostics={noText:0,duplicate:0,rejected:0,published:0,reasons:{}};
+let channelReaderStatus={enabled:true,status:'starting'};
+let receivedChannelMessages=0;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
 const processedMessages=new Map();
 const publishedFreightTexts=new Map(),inFlightFreightTexts=new Set();
@@ -773,6 +776,7 @@ let monitoredGroupCount=null;
 function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
+const ownChannelJids=()=>['120363428757778414@newsletter',resolvedChannelJid,String(process.env.TARGET_CHANNEL_JID||'')];
 
 const CHANNEL_BRAND_VERSION='easttrucks-20261010';
 let channelBrand={status:'pending',version:CHANNEL_BRAND_VERSION};
@@ -886,7 +890,7 @@ async function connect(authDir=dir,candidate=false){
  const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
- let groupRefreshTimer=null,periodicGroupTimer=null;
+ let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null;
  const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},60000);};
  const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},1800000);periodicGroupTimer.unref?.();};
  sock.ev.on('groups.upsert',scheduleGroupRefresh);
@@ -905,8 +909,9 @@ async function connect(authDir=dir,candidate=false){
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
     if(periodicGroupTimer)clearTimeout(periodicGroupTimer);periodicRefresh();
-    qr='';status='connected';(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
+    qr='';status='connected';channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
+    channelReader?.stop();
     if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
@@ -918,30 +923,36 @@ async function connect(authDir=dir,candidate=false){
     }
    }
  });
- // Read freight advertisements from joined groups; never message individuals.
- sock.ev.on('messages.upsert',async({messages,type})=>{
-   if(activeSocket!==sock)return;
+ // Read joined groups and followed channels through the same guarded publish path.
+ const handleMessages=async({messages,type})=>{
+   if(activeSocket!==sock)return false;
    if(type!=='notify'&&type!=='append')return;
+   let completed=true;
    for(const m of messages){
      let freightKey=null;
      try{
        const jid=String(m.key?.remoteJid||'');
-       if(!jid.endsWith('@g.us')||EXCLUDED_GROUPS.has(jid))continue;
+       if(!acceptsFreightSource(jid,EXCLUDED_GROUPS,ownChannelJids()))continue;
+       const fromChannel=isChannelJid(jid);
+       if(fromChannel&&m.key?.fromMe)continue;
+       const sourceMessageId=fromChannel?channelMessageId(m):m.key?.id;
+       if(!sourceMessageId)continue;
        rememberMessage(m);
        if(!m.message)continue;
        const stamp=Number(m.messageTimestamp||0)*1000;
+       if(fromChannel&&(!Number.isFinite(stamp)||stamp<=0||stamp>Date.now()+60000))continue;
        if(stamp && Date.now()-stamp>24*60*60*1000)continue;
-       receivedGroupMessages++;lastReceivedAt=new Date().toISOString();
-       console.log('Group message received',JSON.stringify({group:jid,id:m.key.id}));
+       if(fromChannel)receivedChannelMessages++;else receivedGroupMessages++;lastReceivedAt=new Date().toISOString();
+       console.log(fromChannel?'Channel message received':'Group message received',JSON.stringify({group:jid,id:sourceMessageId}));
        const originalText=getText(m.message);
        if(!originalText){messageDiagnostics.noText++;console.log('Group message has no supported text',JSON.stringify({id:m.key.id}));continue;}
-       if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){console.log('Publishing credentials missing');continue;}
-       const sender=m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
-       const senderPhone=contactFromJid(sender)||((isFreightCandidate(originalText)||hasAvailableVehicle(originalText)||parse(originalText).kind==='load')?await resolveSenderPhone(sock,m):null);
+       if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){completed=false;console.log('Publishing credentials missing');continue;}
+       const sender=fromChannel?'':m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
+       const senderPhone=fromChannel?null:contactFromJid(sender)||((isFreightCandidate(originalText)||hasAvailableVehicle(originalText)||parse(originalText).kind==='load')?await resolveSenderPhone(sock,m):null);
        const parts=freightParts(originalText,senderPhone);
        for(let partIndex=0;partIndex<parts.length;partIndex++){
        const text=parts[partIndex];
-       const messageId=parts.length>1?m.key.id+':part:'+(partIndex+1):m.key.id;
+       const messageId=parts.length>1?sourceMessageId+':part:'+(partIndex+1):sourceMessageId;
        const cacheKey=jid+':'+messageId;
        if(processedMessages.has(cacheKey))continue;
        freightKey=null;
@@ -969,7 +980,7 @@ async function connect(authDir=dir,candidate=false){
        if(isTruck)delete body.p_publish;
        const rpc=isTruck?'publish_whatsapp_truck_available':'ingest_whatsapp_pilot';
        const {response,result}=await ingestFreight(rpc,body);
-       if(!response.ok){lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
+       if(!response.ok){completed=false;lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
        const outcome=JSON.parse(result);
        console.log('Freight ingest result',JSON.stringify({id:messageId,...outcome}));
        if(!shouldPublish||outcome.duplicate===true){processedMessages.set(cacheKey,Date.now());if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);continue;}
@@ -986,13 +997,16 @@ async function connect(authDir=dir,candidate=false){
          const sent=await sendNumberedChannelAd(sock,channel,finalParsed,text.slice(0,1200),adId,messageId);
          if(sent?.key?.id)publishedChannel++;
        }else{lastPublishError='Channel unresolved';console.error(lastPublishError);}
-       }catch(e){lastPublishError=String(e);console.error('Freight part error',JSON.stringify({id:messageId,error:String(e)}));}
+       }catch(e){completed=false;lastPublishError=String(e);console.error('Freight part error',JSON.stringify({id:messageId,error:String(e)}));}
        finally{if(freightKey)inFlightFreightTexts.delete(freightKey);freightKey=null;}
        }
-     }catch(e){lastPublishError=String(e);console.error('Freight processing error',String(e));}
+     }catch(e){completed=false;lastPublishError=String(e);console.error('Freight processing error',String(e));}
      finally{if(freightKey)inFlightFreightTexts.delete(freightKey);}
    }
- });
+   return completed;
+ };
+ sock.ev.on('messages.upsert',handleMessages);
+ channelReader=createChannelReader({sock,isActive:()=>activeSocket===sock&&status==='connected',ownChannels:ownChannelJids,onMessages:handleMessages,statePath:authDir+'/channel-reader.json'});
  // No automatic private or group replies.
 }
 async function startBot(){
@@ -1026,13 +1040,14 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'freight-recovery-20261014',channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-reader-20261015',channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
+
 
 
 
