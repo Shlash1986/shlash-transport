@@ -95,7 +95,7 @@ add("قطر",["أبو سمرة","ابو سمرة","ميناء حمد","مسيع�
 add("البحرين",["جسر الملك فهد","ميناء خليفة بن سلمان","ميناء سلمان","سترة"]);
 add("اليمن",["الوديعة اليمن","شحن اليمن","صرفيت","ميناء عدن","ميناء الحديدة","ميناء المكلا","سيئون","مأرب","تعز","إب","صنعاء","عدن"]);
 
-add("سوريا",["باب الهوا","باب الهوى","نصيب","نصبيض"]);
+add("سوريا",["باب الهوا","باب الهوى","باب الهواء","معبر باب الهواء","نصيب","نصبيض"]);
 add("سوريا",["حما"]);
 add("سوريا",["لاذقيه","اللاذقيه"]);
 add("السعودية",["العلا"]);
@@ -117,7 +117,7 @@ function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
+function canonicalPlace(city){if(city==='باب الهواء'||city==='معبر باب الهواء')return 'باب الهوى';return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
@@ -259,7 +259,35 @@ function countryOnlyDestinationRoute(text){
  if(!from||!to||to.city!=='غير محددة')return null;
  return {from_city:from.city,from_country:from.country,to_city:'غير محددة',to_country:to.country};
 }
+// A loading label determines the origin even when the destination is written
+// first. A crossing mentioned between them remains transit, not a second job.
+// Return null on conflicting/unlabelled places so ordinary fallback cannot
+// accidentally turn one of those places into the delivery destination.
+function loadingTransitRoute(text){
+ const n=geographyText(text);
+ if(!/(?:^|[^\p{L}])(?:التحميل|تحميل)\s+من\s+/u.test(n)||!/(?:^|[^\p{L}])(?:معبر|عبر|طريق|مرورا)(?=$|[^\p{L}])/u.test(n))return undefined;
+ const hits=[];
+ for(const [city,country] of cityCountry){let idx=n.indexOf(city);while(idx>=0){
+  if(placeBoundary(n,idx)&&(idx+city.length===n.length||!/[\p{L}]/u.test(n[idx+city.length])))hits.push({idx,city,country});
+  idx=n.indexOf(city,idx+city.length);
+ }}
+ hits.sort((a,b)=>a.idx-b.idx||b.city.length-a.city.length);
+ const places=[];for(const hit of hits)if(!places.some(p=>hit.idx>=p.idx&&hit.idx<p.idx+p.city.length))places.push(hit);
+ const from=[],to=[],via=[];
+ for(const place of places){
+  const before=n.slice(0,place.idx);
+  if(/(?:^|[^\p{L}])(?:التحميل|تحميل)\s+(?:من\s+)?$/u.test(before))from.push(place);
+  else if(/(?:^|[^\p{L}])(?:عبر|عن\s+طريق|طريق|مرورا\s+(?:من|ب)|من\s+معبر)\s*(?:معبر\s+)?$/u.test(before)||place.city.startsWith('معبر ')&&/(?:^|[^\p{L}])من\s+$/u.test(before))via.push(place);
+  else if(/(?:^|[^\p{L}])(?:الى|الي|على|علي|باتجاه)\s+$/u.test(before))to.push(place);
+  else return null;
+ }
+ if(!via.length)return undefined;
+ if(from.length!==1||to.length!==1)return null;
+ if(canonicalPlace(from[0].city)===canonicalPlace(to[0].city))return null;
+ return {from_city:canonicalPlace(from[0].city),from_country:from[0].country,to_city:canonicalPlace(to[0].city),to_country:to[0].country};
+}
 function route(text){
+ const transit=loadingTransitRoute(text);if(transit!==undefined)return transit;
  const countryOnly=countryOnlyDestinationRoute(text);if(countryOnly)return countryOnly;
  const labeled=labeledRoute(text);if(labeled!==undefined)return labeled;
  const repeated=repeatedOriginRoute(text);if(repeated)return repeated;
@@ -1100,7 +1128,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'delivery-repair-20261016',delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'route-transit-repair-20261016',delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');

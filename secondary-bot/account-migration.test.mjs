@@ -27,7 +27,7 @@ assert.equal((await t.request('/pair-new?token=test-link','POST')).status,303);
 assert.equal(JSON.parse((await t.request('/pair-new/status?token=test-link')).body).code,'ABCD1234');
 assert.equal((await t.request('/pair-new?token=test-link','POST')).status,429);
 next.handlers['connection.update']({connection:'open'});await new Promise(resolve=>setImmediate(resolve));
-assert(old.ended);assert.equal(t.ctx.snapshot().replacementStatus,'connected');assert(t.ctx.snapshot().active.startsWith('436605565676'));assert.equal(t.timers.filter(x=>x.delay===7000).length,0);assert.equal(t.timers.filter(x=>x.delay===1800000).length,1);
+assert(old.ended);assert.equal(t.ctx.snapshot().replacementStatus,'connected');assert(t.ctx.snapshot().active.startsWith('436605565676'));assert.equal(t.timers.filter(x=>x.delay===7000).length,0);assert.equal(t.timers.filter(x=>x.delay===12*60*60*1000).length,1);
 const wrong=await setup();wrong.sockets[1].user.id='436600000000:4@s.whatsapp.net';wrong.sockets[1].handlers['connection.update']({connection:'open'});assert.equal(wrong.ctx.snapshot().replacementStatus,'wrong_number');assert(!wrong.sockets[0].ended);assert(wrong.sockets[1].ended);
 const restart=await setup(true);assert.equal(restart.sockets.length,1);restart.sockets[0].handlers['connection.update']({connection:'open'});assert.equal(restart.ctx.snapshot().replacementStatus,'connected');
 console.log('PASS: old account retained until pairing, protected QR/code, intended-number check, switch without logout/delete, restart on new session only');
