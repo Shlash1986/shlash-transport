@@ -62,7 +62,7 @@ export function decodeChannelMessages(root,jid,decode=bytes=>proto.Message.decod
 export function createChannelReader({sock,isActive,ownChannels,onMessages,statePath,now=()=>Date.now(),listChannels,log=console}){
  const state={enabled:true,status:'starting',followed:0,monitored:0,lastDiscoveryAt:null,lastPollAt:null,received:0,errors:0,lastError:null};
  const sources=new Map();
- let checkpoints={},initialized=false,stopped=false,busy=false,timer=null,nextDiscovery=0,cooldownUntil=0;
+ let checkpoints={},initialized=false,stopped=false,busy=false,timer=null,nextDiscovery=0,cooldownUntil=0,discoveryError=null;
  const list=listChannels||(()=>executeWMexQuery({},'6388546374527196','xwa2_newsletter_subscribed',sock.query,sock.generateMessageTag));
  const allowed=jid=>isChannelJid(jid)&&!ownChannels().includes(jid);
  const seconds=()=>Math.floor(now()/1000);
@@ -92,6 +92,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
   try{
    await load();
    if(now()>=nextDiscovery){
+    try{
     // Back off failed discovery independently from the ordinary group listener.
     nextDiscovery=now()+30*60*1000;
     const response=await list();
@@ -102,21 +103,26 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
     for(const jid of sources.keys())if(!keep.has(jid)){sources.delete(jid);delete checkpoints[jid];}
     for(const channel of channels){
      if(!allowed(channel.id))continue;
-     if(!sources.has(channel.id))sources.set(channel.id,{...channel,subscribeAt:0,pollAt:0});
+     if(!sources.has(channel.id))sources.set(channel.id,{...channel,subscribeAt:0,pollAt:0,failures:0,lastError:null});
      checkpoints[channel.id]??={since:seconds(),floor:seconds()};
     }
     state.followed=channels.length;state.monitored=sources.size;state.lastDiscoveryAt=new Date(now()).toISOString();
     log.info('Followed WhatsApp channels',JSON.stringify(channels.map(c=>({...c,monitored:allowed(c.id)}))));
-    await save();
+    discoveryError=null;await save();
+    }catch(error){discoveryError=String(error?.message||error);failure(error);}
    }
    for(const [jid,source] of sources){
     if(stopped||!isActive()||now()<cooldownUntil)break;
     if(!allowed(jid))continue;
+    if(now()<source.pollAt)continue;
     try{
      if(now()>=source.subscribeAt){
+      source.subscribeAt=now()+300000;
+      try{
       const subscription=await sock.subscribeNewsletterUpdates(jid);
       const duration=Number(subscription?.duration);
       source.subscribeAt=now()+Math.max(60,Number.isFinite(duration)&&duration>0?duration-30:240)*1000;
+      }catch(error){log.warn('Channel live subscription unavailable; polling continues',String(error?.message||error).slice(0,120));}
      }
      if(now()<source.pollAt)continue;
      source.pollAt=now()+120000;
@@ -133,11 +139,13 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
       state.received+=messages.length;
      }
      checkpoint.since=pollStarted;
+     source.failures=0;source.lastError=null;
      state.lastPollAt=new Date(now()).toISOString();
      await save();
-    }catch(error){failure(error);}
+    }catch(error){source.failures++;source.lastError=String(error?.message||error).slice(0,180);source.pollAt=now()+Math.min(900000,120000*2**Math.min(source.failures-1,3));failure(error);}
    }
-   if(state.errors===errorsBefore){state.status='active';state.lastError=null;}
+   const outstanding=discoveryError||[...sources.values()].find(s=>s.lastError)?.lastError;
+   state.status=outstanding?'degraded':'active';state.lastError=outstanding||null;
   }catch(error){failure(error);}
   finally{busy=false;}
  }

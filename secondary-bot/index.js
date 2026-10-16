@@ -1,8 +1,10 @@
+import {socketLogger} from './safe-logging.mjs';
+import {createDeliveryStore} from './delivery-store.mjs';
 import {createHash} from 'node:crypto';
 import {createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId} from './channel-reader.mjs';
 import {extractFreightAd,getAIStatus,isFreightCandidate} from './ai-runtime.mjs';
 const ARABIC_DIGITS                        = { "٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9","۰":"0","۱":"1","۲":"2","۳":"3","۴":"4","۵":"5","۶":"6","۷":"7","۸":"8","۹":"9" };
-function normalize(input=""){ return String(input).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d).replace(/ـ/g,"").replace(/[إأآ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim(); }
+function normalize(input=""){ return String(input).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d).replace(/[ـ\u064B-\u065F\u0670]/g,"").replace(/ی/g,"ي").replace(/ک/g,"ك").replace(/ہ/g,"ه").replace(/[إأآ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim(); }
 const cityCountry = new Map               ();
 function add(c       , cities         ){ for(const city of cities) cityCountry.set(normalize(city),c); }
 add("سوريا",["دمشق","الشام","شام","عين عاروس","عين عروس","عين العروس","حلب","إدلب","ادلب","سرمدا","باب الهوى","معبر باب الهوى","باب السلامة","باب سلامة","باب سلامه","باب السلامه","باب السلام","معبر باب السلام","جرابلس","الباب","الرقة","الحسكة","القامشلي","تدمر","حمص","حماة","حماه","طرطوس","بانياس","دير الزور","ديرالزور","اليعربية","اليعروبية","ساحة التبادل اليعربية","ساحة تبادل اليعربية","التنف","البوكمال","تل أبيض","رأس العين","خان العسل","نصيب","معبر نصيب","الدرباسية","رميلان","منبج","عفرين","عدرا","القحطانية","تل تمر","تل حميس"]);
@@ -17,6 +19,7 @@ add("تركيا",["مرسين","غازي عنتاب","عنتاب","إسطنبو�
 
 // Syrian freight hubs and common spelling used in dispatch messages.
 add("سوريا",["حسيا","حسياء","سلوك"]);
+add("السعودية",["ميناء جدة","المزاحمية","المزاحميه","جدة الخمرة","جده الخمره","جده ساحه بالخمره","جدة ساحة بالخمرة"]);
 const trailers                   = [
   [/(?:سلطحة|سلطحه)/u,"سطحة"],
   [/(?:قاطره\s*(?:و)?مقطوره|قاطرة\s*(?:و)?مقطورة|قاطره\s+مقطوره|قاطرة\s+مقطورة)/u,"قاطرة مقطورة"],
@@ -24,7 +27,7 @@ const trailers                   = [
   [/(?:اورفليه|أورفليه|اورفليه|أورفلية|اورفلية|اوفليه|أوفليه|اورفلي|أورفلي)/u,"أورفليه"],
   [/(?:براد|برادات|ثلاجه|ثلاجة|reefer)/iu,"براد"],
   [/(?:بوكس\s*مبرد)/u,"بوكس مبرد"],
-  [/(?:ستارات|ستاره|ستارة|ستاير|ستائر|اورفلية\s*ستارة)/u,"ستارة"],
+  [/(?:ستارات|ستاره|ستارة|ستايرر|ستاير|ستائر|اورفلية\s*ستارة)/u,"ستارة"],
   [/(?:سطحه|سطحة|سطحا|سطحات|سطحيه|سطحية|flatbed)/iu,"سطحة"],
   [/(?:كشف\s*جنب)/u,"كشف جنب"],
   [/(?:جوانب\s*الماني|جوانب\s*ألماني)/u,"جوانب ألماني"],
@@ -57,9 +60,9 @@ trailers.unshift(
  [/(?:صهريج\s*(?:وقود|ديزل|بنزين))/u,"صهريج وقود"],
  [/(?:صهريج\s*(?:مياه|ماء)|وايت\s*(?:مياه|ماء))/u,"صهريج مياه"],
  [/(?:ناقلة\s*سيارات|حاملة\s*سيارات)/u,"ناقلة سيارات"],
- [/(?:حاوية|حاويات|كونتينر|container)/iu,"حاويات"],
+ [/(?:حاوية|حاويات|كونتينر|كونتينرات|كونتير|كونتيرات|كنتنر|كنتنرات|كونتنر|كونتنرات|container)/iu,"حاويات"],
  [/(?:سايلو|سيلو)/u,"سايلو"],
- [/(?:دينا|دينة|دنه)/u,"دينا"],
+ [/(?:^|[^\p{L}])(?:دينا|دينة|دنه)(?=$|[^\p{L}])/u,"دينا"],
  [/(?:ونش|كرين)/u,"ونش"],
  [/(?:براد\s*تجميد|فريزر)/u,"براد تجميد"],
  [/(?:صاره|صارة)/u,"صارة"]
@@ -114,7 +117,7 @@ function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){return ({'باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
+function canonicalPlace(city){return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
@@ -176,15 +179,19 @@ function explicitEndpoint(value){
  }
  return null;
 }
+function routeLinesText(raw){
+ return String(raw||'').replace(/\r?\n\s*(?=(?:الى|إلى|الي|الی)\s)/gu,' ').split(/\r?\n/).map(line=>line.replace(/(من\s+.+?)\s+لل([\p{L} ]+)(?=$)/u,'$1 إلى ال$2')).join('\n');
+}
 function explicitRoute(text){
  const routes=[];
+ text=routeLinesText(text);
  for(const line of String(text||'').split(/[\r\n]+/u)){
   const n=normalize(line.replace(/[\p{S}\uFE0F*]/gu,' '));
   const match=n.match(/(?:^|[^\p{L}])من\s+(.+?)\s+(?:الى|الي|على|علي|باتجاه|ع)\s+(.+)$/u);
   if(!match)continue;
   const origin=match[1].replace(/^(?:الساحة|الساحه)\s+في\s+/u,'').replace(/\s+ساحة$/u,'');
   const from=explicitEndpoint(origin);
-  const destination=match[2].split(/\s+(?:الحمولة|الحموله|حمولة|حموله|وزن|الوزن|للتواصل|رقم|هاتف|تحميل|ذهاب|طريق|عبر|ترانزيت|ساحة)(?=\s|:)|[،,;]|\s+(?=[+\d])/u)[0].trim();
+  const destination=match[2].split(/\s+(?:الحمولة|الحموله|حمولة|حموله|وزن|الوزن|للتواصل|رقم|هاتف|تحميل|ذهاب|طريق|عبر|ترانزيت|ساحة|ساحه)(?=\s|:|$)|[،,;]|\s+(?=[+\d])/u)[0].trim();
   const to=explicitEndpoint(destination);
   if(from&&to)routes.push({from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country});
  }
@@ -258,6 +265,8 @@ function route(text){
  const repeated=repeatedOriginRoute(text);if(repeated)return repeated;
  const multiple=multiDestinationRoute(text);if(multiple)return multiple;
  const explicit=explicitRoute(text);if(explicit)return explicit;
+ // Never let a return depot substitute for an unrecognized delivery city.
+ if(/(?:ارجاع|إرجاع|اعادة|إعادة|الفارغ|return)/iu.test(text)&&/(?:^|[^\p{L}])من\s+.+?\s+(?:الى|إلى|الي)\s+/u.test(routeLinesText(text)))return null;
  const n=geographyText(text), hits=[];
  for(const [city] of cityCountry){let pos=n.indexOf(city);while(pos>=0){
   if(placeBoundary(n,pos)&&(pos+city.length===n.length||!/[\p{L}]/u.test(n[pos+city.length])))hits.push({idx:pos,city});
@@ -467,7 +476,7 @@ function englishLabeledFreight(raw){
  const plain=text.trim().match(/^([a-z ]+?)\s+to\s+([a-z ]+)(?=\r?\n|$)/i);
  if((fromLabels.length!==1||toLabels.length!==1)&&!plain)return text;
  const cities={
-  'rabigh port':'ميناء رابغ',rabigh:'رابغ',jeddah:'جدة',jedda:'جدة',riyadh:'الرياض','riyadh sulai':'الرياض',
+  'rabigh port':'ميناء رابغ',rabigh:'رابغ',sharurah:'شرورة',sharourah:'شرورة',jeddah:'جدة',jedda:'جدة',riyadh:'الرياض','riyadh sulai':'الرياض',
   dammam:'الدمام',mecca:'مكة',makkah:'مكة',medina:'المدينة',madinah:'المدينة',
   dubai:'دبي','abu dhabi':'أبوظبي',doha:'الدوحة',kuwait:'الكويت',
   damascus:'دمشق',aleppo:'حلب',qamishli:'القامشلي',amman:'عمان',baghdad:'بغداد'
@@ -582,8 +591,18 @@ function formatChannelAd(parsed,rawText='',publication=null){
 // Split repeated requests before parsing. Share only a sole trailing contact,
 // and expand only destinations explicitly separated by a route preposition.
 function freightParts(raw,fallbackContact){
- const text=String(raw||'').trim();
+ const text=routeLinesText(String(raw||'').trim());
  const lines=text.split(/[\r\n]+/u).map(x=>x.trim()).filter(Boolean);
+ // Independent route blocks keep their own counts/details and a shared contact.
+ const blocks=lines.map((line,i)=>({i,route:explicitRoute(line)})).filter(x=>x.route);
+ if(blocks.length>1&&blocks.length<=20&&!hasAvailableVehicle(text)){
+  const header=lines.slice(0,blocks[0].i).join('\n');
+  const nums=normalize(text).match(/(?:\+|00)?\d[\d ()-]{7,}\d/g)||[];
+  const shared=nums.length===1?phone(nums[0]):nums.length===0?fallbackContact:null;
+  if(shared&&/(?:مطلوب|تحميل|حمل|حمولة|حموله)/u.test(normalize(text))){
+   return blocks.map((block,i)=>header+'\n'+lines.slice(block.i,blocks[i+1]?.i??lines.length).join('\n')+'\n'+shared);
+  }
+ }
  const jobs=lines.map((line,i)=>({line,i,route:explicitRoute('من '+line.replace(/^من\s+/u,''))})).filter(x=>x.route);
  if(jobs.length>1&&jobs.length<=20){
   const header=lines.slice(0,jobs[0].i).join(' ');
@@ -677,22 +696,34 @@ async function publicationNumber(adId,action='reserve',messageId=null){
 function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
  const task=numberedChannelQueue.then(async()=>{
   if(!adId)throw new Error('Published advertisement ID missing');
+  let job=deliveryStore.data.outbox[adId];
+  if(!job)job=await deliveryStore.put('outbox',adId,{channel,parsed,text,sourceId,at:Date.now(),status:'pending',next:0});
+  if(job.status==='sent')return null;
+  // A restart or uncertain send must not generate a second public message.
+  if(job.status==='sending')throw new Error('Channel send outcome uncertain; review required');
+  if(job.status==='receipt'){
+   await publicationNumber(adId,'confirm',job.messageId);
+   await deliveryStore.put('outbox',adId,{...job,status:'sent'});return null;
+  }
+  if(!channel.endsWith('@newsletter'))throw new Error('Channel unresolved');
   let reference;
-  for(let attempt=0;attempt<300;attempt++){
+  for(let attempt=0;attempt<3;attempt++){
    reference=await publicationNumber(adId);
    if(reference.ready)break;
    await new Promise(resolve=>setTimeout(resolve,2000));
   }
   if(!reference?.ready)throw new Error('Publication numbering initialization pending');
-  if(reference.already_sent)return null;
+  if(reference.already_sent){await deliveryStore.put('outbox',adId,{...job,status:'sent'});return null;}
   if(!Number.isSafeInteger(reference.ad_number)||reference.ad_number<3000||!Number.isInteger(reference.daily_number)||reference.daily_number<1||!/^\d{4}-\d{2}-\d{2}$/.test(reference.day))throw new Error('Invalid publication reference');
+  await deliveryStore.put('outbox',adId,{...job,status:'sending'});
   const sent=await sock.sendMessage(channel,{text:formatChannelAd(parsed,text,reference),linkPreview:null});
-  if(!sent?.key?.id)throw new Error('Channel message ID missing');
-  console.log('Channel publication sent',JSON.stringify({sourceId,channel,messageId:sent.key.id,adId,...reference}));
-  // A failed receipt update must never cause a second WhatsApp send.
+  if(!sent?.key?.id)throw new Error('Channel message ID missing; review required');
+  job={...job,status:'receipt',messageId:sent.key.id};
+  await deliveryStore.put('outbox',adId,job);
+  console.log('Channel publication sent',JSON.stringify({sourceId,messageId:sent.key.id,adId,ad_number:reference.ad_number}));
   for(let attempt=0;attempt<3;attempt++){
-   try{await publicationNumber(adId,'confirm',sent.key.id);break;}
-   catch(error){if(attempt===2)console.error('Channel receipt confirmation failed',JSON.stringify({adId,messageId:sent.key.id,error:String(error)}));}
+   try{await publicationNumber(adId,'confirm',sent.key.id);await deliveryStore.put('outbox',adId,{...job,status:'sent'});break;}
+   catch(error){if(attempt===2)console.error('Channel receipt confirmation pending',JSON.stringify({adId,error:String(error)}));}
   }
   return sent;
  });
@@ -729,7 +760,7 @@ async function learnPlacesFromPlatform(){
 function getText(message){
  let msg=message;
  for(let i=0;i<8&&msg;i++){
-  const inner=msg.ephemeralMessage?.message||msg.viewOnceMessage?.message||msg.viewOnceMessageV2?.message||msg.viewOnceMessageV2Extension?.message||msg.documentWithCaptionMessage?.message;
+  const inner=msg.protocolMessage?.editedMessage||msg.editedMessage?.message||msg.ephemeralMessage?.message||msg.viewOnceMessage?.message||msg.viewOnceMessageV2?.message||msg.viewOnceMessageV2Extension?.message||msg.documentWithCaptionMessage?.message;
   if(!inner)break;
   msg=inner;
  }
@@ -750,6 +781,7 @@ async function verifyIngestConnection(){
 await Promise.all([learnPlacesFromPlatform(),verifyIngestConnection()]);
 const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
+const deliveryStore=await createDeliveryStore(dir+'/delivery-state.json');
 let qr='',status='starting';
 let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
@@ -761,12 +793,14 @@ const replacementSession=String(process.env.WA_REPLACEMENT_SESSION||'');
 if(replacementSession&&!/^[a-zA-Z0-9_-]{1,50}$/.test(replacementSession))throw new Error('Invalid replacement session name');
 const replacementDir=replacementPhone?'/data/wa-session-'+replacementPhone+(replacementSession?'-'+replacementSession:''):null;
 let pendingSocket=null,replacementQr='',replacementCode='',replacementStatus=replacementPhone?'starting':'not_requested',codeRequestedAt=0;
-const messageDiagnostics={noText:0,duplicate:0,rejected:0,published:0,reasons:{}};
+const messageDiagnostics={noText:0,duplicate:0,rejected:0,published:0,reasons:{},unsupportedTypes:{}};
 let channelReaderStatus={enabled:true,status:'starting'};
 let receivedChannelMessages=0;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
-const processedMessages=new Map();
-const publishedFreightTexts=new Map(),inFlightFreightTexts=new Set();
+const processedMessages=new Map(Object.entries(deliveryStore.data.processed));
+async function markProcessed(key){processedMessages.set(key,Date.now());await deliveryStore.put('processed',key,Date.now());if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);}
+
+const publishedFreightTexts=new Map(Object.entries(deliveryStore.data.freight)),inFlightFreightTexts=new Set();
 const recentMessages=new Map();
 // Owner exclusions: original groups 1–9 plus replacement-account groups
 // 1,2,3,5,6,7,10,13,15,17,22,27 from the verified 31-group list.
@@ -853,7 +887,7 @@ async function refreshJoinedGroups(sock,joinRequested=false){
   if(activeSocket!==sock)return;
   groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;groupCheckError='';
   console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));
-  console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));
+  if(process.env.BOT_LOG_LEVEL==='debug')console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));
  }catch(e){groupCheckError=String(e);if(/rate.overlimit|rate-overlimit|429/i.test(groupCheckError))groupRefreshCooldownUntil=Date.now()+60*60*1000;console.error('Group refresh failed',String(e));}
  finally{groupRefreshInFlight=false;}
 }
@@ -887,10 +921,10 @@ async function publishRequestedChannelPost(sock){
 async function connect(authDir=dir,candidate=false){
  if(reconnectTimers.has(authDir)){clearTimeout(reconnectTimers.get(authDir));reconnectTimers.delete(authDir);}
  const {state,saveCreds}=await useMultiFileAuthState(authDir);
- const sock=makeWASocket({auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
+ const sock=makeWASocket({logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
- let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null;
+ let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null,retryTimer=null;
  const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},60000);};
  const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},1800000);periodicGroupTimer.unref?.();};
  sock.ev.on('groups.upsert',scheduleGroupRefresh);
@@ -909,10 +943,11 @@ async function connect(authDir=dir,candidate=false){
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
     if(periodicGroupTimer)clearTimeout(periodicGroupTimer);periodicRefresh();
+    if(retryTimer)clearTimeout(retryTimer);retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();
     qr='';status='connected';channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
     channelReader?.stop();
-    if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);
+    if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);if(retryTimer)clearTimeout(retryTimer);
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
     if(selected){qr='';status='disconnected';}
@@ -929,7 +964,7 @@ async function connect(authDir=dir,candidate=false){
    if(type!=='notify'&&type!=='append')return;
    let completed=true;
    for(const m of messages){
-     let freightKey=null;
+     let freightKey=null,retryKey=null,messageCompleted=true;
      try{
        const jid=String(m.key?.remoteJid||'');
        if(!acceptsFreightSource(jid,EXCLUDED_GROUPS,ownChannelJids()))continue;
@@ -943,10 +978,13 @@ async function connect(authDir=dir,candidate=false){
        if(fromChannel&&(!Number.isFinite(stamp)||stamp<=0||stamp>Date.now()+60000))continue;
        if(stamp && Date.now()-stamp>24*60*60*1000)continue;
        if(fromChannel)receivedChannelMessages++;else receivedGroupMessages++;lastReceivedAt=new Date().toISOString();
-       console.log(fromChannel?'Channel message received':'Group message received',JSON.stringify({group:jid,id:sourceMessageId}));
+       if(process.env.BOT_LOG_LEVEL==='debug')console.log(fromChannel?'Channel message received':'Group message received',JSON.stringify({group:jid,id:sourceMessageId}));
        const originalText=getText(m.message);
-       if(!originalText){messageDiagnostics.noText++;console.log('Group message has no supported text',JSON.stringify({id:m.key.id}));continue;}
+       if(!originalText){messageDiagnostics.noText++;const kind=Object.keys(m.message).filter(k=>k!=='messageContextInfo').join(',').slice(0,100)||'empty';messageDiagnostics.unsupportedTypes[kind]=(messageDiagnostics.unsupportedTypes[kind]||0)+1;continue;}
        if(!process.env.SUPABASE_URL||!process.env.SUPABASE_ANON_KEY||!process.env.TRUCKLINK_INGEST_TOKEN){completed=false;console.log('Publishing credentials missing');continue;}
+       retryKey=jid+':'+sourceMessageId;
+       const previousRetry=deliveryStore.data.retries[retryKey];
+       await deliveryStore.put('retries',retryKey,{message:{key:m.key,messageTimestamp:Number(m.messageTimestamp||Date.now()/1000),message:{conversation:originalText}},attempts:(previousRetry?.attempts||0)+1,next:Date.now()+Math.min(900000,30000*2**Math.min(previousRetry?.attempts||0,5))});
        const sender=fromChannel?'':m.key.fromMe?(sock.user?.id||m.key.participantAlt||m.key.participant||''):(m.key.participantAlt||m.key.participant||'');
        const senderPhone=fromChannel?null:contactFromJid(sender)||((isFreightCandidate(originalText)||hasAvailableVehicle(originalText)||parse(originalText).kind==='load')?await resolveSenderPhone(sock,m):null);
        const parts=freightParts(originalText,senderPhone);
@@ -980,33 +1018,55 @@ async function connect(authDir=dir,candidate=false){
        if(isTruck)delete body.p_publish;
        const rpc=isTruck?'publish_whatsapp_truck_available':'ingest_whatsapp_pilot';
        const {response,result}=await ingestFreight(rpc,body);
-       if(!response.ok){completed=false;lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
+       if(!response.ok){completed=false;messageCompleted=false;lastPublishError='Ingest HTTP '+response.status;console.error('Ingest failed',response.status,result.slice(0,300));continue;}
        const outcome=JSON.parse(result);
        console.log('Freight ingest result',JSON.stringify({id:messageId,...outcome}));
-       if(!shouldPublish||outcome.duplicate===true){processedMessages.set(cacheKey,Date.now());if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);continue;}
-       if(outcome.published!==true)continue;
-       messageDiagnostics.published++;
-       if(freightKey){publishedFreightTexts.set(freightKey,Date.now());if(publishedFreightTexts.size>5000)publishedFreightTexts.delete(publishedFreightTexts.keys().next().value);}
-       processedMessages.set(cacheKey,Date.now());
-       if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);
-       if(isTruck)publishedTrucks++;else publishedLoads++;
-       lastPublishError='';
+       const adId=outcome.published_load_id||outcome.published_truck_id;
+       if(!shouldPublish||(outcome.duplicate===true&&!adId)){await markProcessed(cacheKey);continue;}
+       if(outcome.published!==true&&!adId){console.warn('Freight rejected by server',JSON.stringify({id:messageId,reason:outcome.reason||'not_published'}));await markProcessed(cacheKey);continue;}
+       if(!adId)throw new Error('Ingest success missing advertisement ID');
        const channel=String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||'');
+       if(!deliveryStore.data.outbox[adId])await deliveryStore.put('outbox',adId,{channel,parsed:finalParsed,text:text.slice(0,1200),sourceId:messageId,at:Date.now(),status:'pending',next:0});
+       if(outcome.published===true&&!outcome.duplicate)messageDiagnostics.published++;
+       if(freightKey){publishedFreightTexts.set(freightKey,Date.now());await deliveryStore.put('freight',freightKey,Date.now());if(publishedFreightTexts.size>5000)publishedFreightTexts.delete(publishedFreightTexts.keys().next().value);}
+       await markProcessed(cacheKey);
+       if(outcome.published===true&&!outcome.duplicate){if(isTruck)publishedTrucks++;else publishedLoads++;}
+       lastPublishError='';
        if(channel.endsWith('@newsletter')){
-         const adId=outcome.published_load_id||outcome.published_truck_id;
          const sent=await sendNumberedChannelAd(sock,channel,finalParsed,text.slice(0,1200),adId,messageId);
          if(sent?.key?.id)publishedChannel++;
        }else{lastPublishError='Channel unresolved';console.error(lastPublishError);}
-       }catch(e){completed=false;lastPublishError=String(e);console.error('Freight part error',JSON.stringify({id:messageId,error:String(e)}));}
+       }catch(e){completed=false;messageCompleted=false;lastPublishError=String(e);console.error('Freight part error',JSON.stringify({id:messageId,error:String(e)}));}
        finally{if(freightKey)inFlightFreightTexts.delete(freightKey);freightKey=null;}
        }
-     }catch(e){completed=false;lastPublishError=String(e);console.error('Freight processing error',String(e));}
-     finally{if(freightKey)inFlightFreightTexts.delete(freightKey);}
+     }catch(e){completed=false;messageCompleted=false;lastPublishError=String(e);console.error('Freight processing error',String(e));}
+     finally{if(freightKey)inFlightFreightTexts.delete(freightKey);if(retryKey&&messageCompleted)await deliveryStore.remove('retries',retryKey);}
    }
    return completed;
  };
- sock.ev.on('messages.upsert',handleMessages);
- channelReader=createChannelReader({sock,isActive:()=>activeSocket===sock&&status==='connected',ownChannels:ownChannelJids,onMessages:handleMessages,statePath:authDir+'/channel-reader.json'});
+ // Serialize events to avoid processing a source message twice concurrently.
+ let messageWork=Promise.resolve();
+ const enqueueMessages=batch=>{const task=messageWork.then(()=>handleMessages(batch));messageWork=task.catch(error=>console.error('Message worker error',String(error)));return task;};
+ sock.ev.on('messages.upsert',enqueueMessages);
+ const retryPending=async()=>{
+  try{
+   if(activeSocket===sock&&status==='connected'){
+    const due=Object.entries(deliveryStore.data.retries).filter(([,job])=>job.next<=Date.now()).slice(0,20);
+    for(const [key,job] of due){
+     if(Date.now()-Number(job.message.messageTimestamp)*1000>86400000){await deliveryStore.remove('retries',key);console.warn('Ingest retry expired',key);continue;}
+     await enqueueMessages({type:'notify',messages:[job.message]});
+    }
+    for(const [adId,job] of Object.entries(deliveryStore.data.outbox).filter(([,j])=>['pending','receipt'].includes(j.status)&&j.next<=Date.now()).slice(0,20)){
+     if(Date.now()-job.at>86400000&&job.status==='pending'){await deliveryStore.put('outbox',adId,{...job,status:'expired'});continue;}
+     try{const sent=await sendNumberedChannelAd(sock,String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||job.channel||''),job.parsed,job.text,adId,job.sourceId);if(sent?.key?.id)publishedChannel++;}
+     catch(error){const current=deliveryStore.data.outbox[adId];await deliveryStore.put('outbox',adId,{...current,next:Date.now()+60000});console.warn('Channel delivery pending',JSON.stringify({adId,status:current.status,error:String(error).slice(0,160)}));}
+    }
+   }
+  }catch(error){console.error('Delivery retry worker error',String(error));}
+  finally{if(activeSocket===sock){retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();}}
+ };
+ retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();
+ channelReader=createChannelReader({sock,isActive:()=>activeSocket===sock&&status==='connected',ownChannels:ownChannelJids,onMessages:enqueueMessages,statePath:authDir+'/channel-reader.json'});
  // No automatic private or group replies.
 }
 async function startBot(){
@@ -1040,7 +1100,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-reader-20261015-poll-fix',channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'delivery-repair-20261016',delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');

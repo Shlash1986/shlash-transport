@@ -1,3 +1,6 @@
+import {createDeliveryStore as realDeliveryStore} from './delivery-store.mjs';
+import {socketLogger} from './safe-logging.mjs';
+const createDeliveryStore=()=>realDeliveryStore(null);
 import fs from 'node:fs';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
@@ -11,13 +14,13 @@ const callbacks={},requests=[],sent=[];
 let mode='success';
 let aiCalls=0;
 const sock={user:{id:'4368120528715:4@s.whatsapp.net'},groupMetadata:async()=>({participants:[{id:'99999999999999@lid',lid:'99999999999999@lid',jid:'963955111222@s.whatsapp.net'},{id:'88888888888888@lid',jid:'963955999888@s.whatsapp.net'}]}),ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
-const context=vm.createContext({createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
+const context=vm.createContext({createDeliveryStore,socketLogger,createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
  const body=JSON.parse(opts.body);
  if(url.endsWith('whatsapp_publication_number'))return {ok:true,json:async()=>body.p_action==='confirm'?{ready:true,sent:true}:{ready:true,ad_number:3000+sent.length,daily_number:59+sent.length,day:'2026-10-10',already_sent:false}};
  if(body.p_message_id==='connection-probe'){assert.equal(body.p_text,'');assert.equal(body.p_publish,false);return {ok:false,status:400,json:async()=>({code:'P0001',message:'invalid_text'})};}
  requests.push({url,body});
- return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available')),published_load_id:'00000000-0000-0000-0000-000000000001'})};
+ return {ok:mode!=='error',status:500,text:async()=>JSON.stringify(mode==='duplicate'?{duplicate:true,published:true}:{published:mode==='success'&&(body.p_publish===true||url.endsWith('publish_whatsapp_truck_available')),published_load_id:createHash('sha256').update(body.p_message_id).digest('hex').slice(0,32)})};
 }});
 context.isFreightCandidate=isFreightCandidate;context.getAIStatus=()=>({status:'not_configured'});context.extractFreightAd=async()=>{aiCalls++;return null;};
 await vm.runInContext('(async()=>{'+source+';await connect();globalThis.api={parse,getText,validateAIParse,refreshJoinedGroups,cityCountry,getLearning:()=>({learnedPlaces,placeLearningStatus,ingestConnectionStatus})};})()',context);
@@ -187,3 +190,11 @@ assert.equal(requests.at(-1).body.p_parsed.load.contact_phone,null);
 const expired=message('10',channelAd,'120363400017474686@newsletter');expired.messageTimestamp-=90000;
 const beforeExpired=requests.length;await upsert([expired]);assert.equal(requests.length,beforeExpired);
 console.log('PASS: Nassib-Dubai channel ad, server IDs, cross-source duplicates, own-channel exclusion, no invented contact and stale posts');
+
+// Concurrent deliveries of the same source must enter the transaction once.
+const beforeConcurrent=requests.length,beforeConcurrentSent=sent.length;
+const concurrent=message('CONCURRENT20261016','مطلوب حاويات من جدة إلى شرورة +966562161133');
+await Promise.all([upsert([concurrent]),upsert([concurrent]),upsert([concurrent])]);
+assert.equal(requests.length,beforeConcurrent+1);assert.equal(sent.length,beforeConcurrentSent+1);
+assert.equal(getText({protocolMessage:{editedMessage:{conversation:'edited freight'}}}),'edited freight');
+console.log('PASS: concurrent events publish once and edited text is extracted');

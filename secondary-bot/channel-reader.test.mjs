@@ -67,3 +67,14 @@ test('discovery errors stay visible without breaking group reception or rapid re
  await reader.tick();await reader.tick();
  assert.equal(attempts,1);assert.equal(reader.state.status,'degraded');assert.equal(reader.state.lastError,'rate-overlimit');reader.stop();
 });
+
+test('polling continues when the optional live subscription times out',async()=>{
+ let polls=0;const reader=createChannelReader({sock:{subscribeNewsletterUpdates:async()=>{throw new Error('Timed Out');},query:async()=>{polls++;return response(2000000000);}},isActive:()=>true,ownChannels:()=>[own],onMessages:async()=>true,now:()=>2000000000000,listChannels:async()=>[{id:source}],log:quiet});
+ await reader.tick();assert.equal(polls,1);assert.equal(reader.state.status,'active');reader.stop();
+});
+test('a skipped retry interval does not hide a failed channel and retries back off',async()=>{
+ let clock=2000000000000,polls=0,fail=true;
+ const reader=createChannelReader({sock:{subscribeNewsletterUpdates:async()=>({duration:600}),query:async()=>{polls++;if(fail)throw new Error('Timed Out');return response(Math.floor(clock/1000));}},isActive:()=>true,ownChannels:()=>[own],onMessages:async()=>true,now:()=>clock,listChannels:async()=>[{id:source}],log:quiet});
+ await reader.tick();assert.equal(reader.state.status,'degraded');clock+=30000;await reader.tick();assert.equal(reader.state.status,'degraded');assert.equal(polls,1);
+ clock+=90000;await reader.tick();assert.equal(polls,2);clock+=120000;await reader.tick();assert.equal(polls,2);clock+=120000;fail=false;await reader.tick();assert.equal(polls,3);assert.equal(reader.state.status,'active');reader.stop();
+});
