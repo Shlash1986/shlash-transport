@@ -94,7 +94,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
    if(now()>=nextDiscovery){
     try{
     // Back off failed discovery independently from the ordinary group listener.
-    nextDiscovery=now()+30*60*1000;
+    nextDiscovery=now()+12*60*60*1000;
     const response=await list();
     if(!response||typeof response!=='object')throw new Error('Invalid subscribed channel list');
     const channels=subscribedChannels(response);
@@ -109,7 +109,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
     state.followed=channels.length;state.monitored=sources.size;state.lastDiscoveryAt=new Date(now()).toISOString();
     log.info('Followed WhatsApp channels',JSON.stringify(channels.map(c=>({...c,monitored:allowed(c.id)}))));
     discoveryError=null;await save();
-    }catch(error){discoveryError=String(error?.message||error);failure(error);}
+    }catch(error){nextDiscovery=now()+30*60*1000;discoveryError=String(error?.message||error);failure(error);}
    }
    for(const [jid,source] of sources){
     if(stopped||!isActive()||now()<cooldownUntil)break;
