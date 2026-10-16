@@ -926,7 +926,7 @@ async function connect(authDir=dir,candidate=false){
  sock.ev.on('creds.update',saveCreds);
  let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null,retryTimer=null;
  const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},60000);};
- const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},1800000);periodicGroupTimer.unref?.();};
+ const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},12*60*60*1000);periodicGroupTimer.unref?.();};
  sock.ev.on('groups.upsert',scheduleGroupRefresh);
  sock.ev.on('groups.update',scheduleGroupRefresh);
  // Membership changes are handled by periodic refresh to avoid WhatsApp metadata rate limits.
