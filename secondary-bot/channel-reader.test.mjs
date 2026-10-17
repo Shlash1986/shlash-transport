@@ -9,6 +9,25 @@ import {acceptsFreightSource,channelMessageId,subscribedChannels,decodeChannelMe
 const own='120363428757778414@newsletter',source='120363400017474686@newsletter';
 const response=(timestamp,id='7')=>({tag:'iq',attrs:{},content:[{tag:'messages',attrs:{},content:[{tag:'message',attrs:{server_id:id,t:String(timestamp)},content:[{tag:'plaintext',attrs:{},content:proto.Message.encode({conversation:'مطلوب صندوق من معبر نصيب إلى دبي 5 طن +963941103399'}).finish()}]}]}]});
 const quiet={info(){},warn(){}};
+test('overlapping readers cannot collide on checkpoint temporary files; stopped readers do not ingest',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'easttrucks-reader-handoff-'));
+ const path=join(dir,'reader.json');let release,started;
+ const arrived=new Promise(resolve=>{started=resolve;});
+ const pending=new Promise(resolve=>{release=resolve;});
+ let deliveries=0;
+ const options={isActive:()=>true,ownChannels:()=>[own],onMessages:async()=>{deliveries++;return true;},now:()=>2000000000000,listChannels:async()=>[{id:source}],statePath:path,log:quiet};
+ const first=createChannelReader({...options,sock:{subscribeNewsletterUpdates:async()=>({duration:600}),query:async()=>{started();return pending;}}});
+ const second=createChannelReader({...options,sock:{subscribeNewsletterUpdates:async()=>({duration:600}),query:async()=>response(2000000000)}});
+ try{
+  const running=first.tick();await arrived;first.stop();
+  await second.tick();release(response(2000000000));await running;
+  assert.equal(deliveries,1);assert.equal(second.state.errors,0);
+  const checkpoint=JSON.parse(await readFile(path,'utf8'));assert.equal(checkpoint[source].since,2000000000);
+  const third=createChannelReader({...options,sock:{subscribeNewsletterUpdates:async()=>({duration:600}),query:async()=>response(2000000000)}});
+  const fourth=createChannelReader({...options,sock:{subscribeNewsletterUpdates:async()=>({duration:600}),query:async()=>response(2000000000)}});
+  await Promise.all([third.tick(),fourth.tick()]);assert.equal(third.state.errors+fourth.state.errors,0);third.stop();fourth.stop();
+ }finally{first.stop();second.stop();await rm(dir,{recursive:true,force:true});}
+});
 test('channel source, short server ID, protobuf text and own-channel isolation',()=>{
  assert(acceptsFreightSource(source,new Set(),[own]));
  assert(!acceptsFreightSource(own,new Set(),[own]));

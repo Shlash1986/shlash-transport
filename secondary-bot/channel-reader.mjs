@@ -1,4 +1,5 @@
-import {readFile,writeFile,rename} from 'node:fs/promises';
+import {readFile,writeFile,rename,unlink} from 'node:fs/promises';
+import {randomUUID} from 'node:crypto';
 import {proto} from '@whiskeysockets/baileys';
 import {executeWMexQuery} from '@whiskeysockets/baileys/lib/Socket/mex.js';
 
@@ -67,9 +68,13 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
  const allowed=jid=>isChannelJid(jid)&&!ownChannels().includes(jid);
  const seconds=()=>Math.floor(now()/1000);
  async function save(){
-  if(!statePath)return;
-  await writeFile(statePath+'.tmp',JSON.stringify(checkpoints));
-  await rename(statePath+'.tmp',statePath);
+  if(!statePath||stopped||!isActive())return;
+  const temporary=statePath+'.'+randomUUID()+'.tmp';
+  try{
+   await writeFile(temporary,JSON.stringify(checkpoints),{mode:0o600});
+   if(stopped||!isActive())return;
+   await rename(temporary,statePath);
+  }finally{await unlink(temporary).catch(error=>{if(error.code!=='ENOENT')throw error;});}
  }
  async function load(){
   if(initialized)return;
@@ -132,6 +137,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
      const since=Math.max(seconds()-86400,checkpoint.floor,checkpoint.since-60);
      const pollStarted=seconds();
      const response=await fetchChannelMessages(sock,jid,100);
+     if(stopped||!isActive())break;
      const messages=decodeChannelMessages(response,jid).filter(m=>m.messageTimestamp>=since&&m.messageTimestamp<=seconds()+60);
      if(messages.length>=100)throw new Error('Channel poll reached 100-message limit; checkpoint retained');
      if(messages.length){

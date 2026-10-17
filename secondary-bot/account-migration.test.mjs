@@ -12,13 +12,14 @@ const createChannelReader=()=>({state:{enabled:true,status:'test'},start(){},sto
 const filename=process.argv[2]||'index.js';
 const source=fs.readFileSync(filename,'utf8').replace(/^import .*;$/gm,'').replace('await mkdir(dir,{recursive:true});','').replace('await Promise.all([learnPlacesFromPlatform(),verifyIngestConnection()]);','').replace("startBot().catch(e=>{status='error';console.error('pairing connection failed',e.message);});",'');
 async function setup(registered=false){
- const sockets=[],timers=[];let httpHandler;
+ const sockets=[],timers=[],relayConnections=[];let httpHandler;
+ const createChannelGroupRelay=async()=>({connect:socket=>relayConnections.push(socket),disconnect(){},accept:async()=>false,observeSent:async()=>false,snapshot:()=>({enabled:false})});
  const ctx=vm.createContext({createChannelGroupRelay,isRelayText,createDeliveryStore,socketLogger,createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,encodeURIComponent,setTimeout:(fn,delay)=>{timers.push({fn,delay});return timers.length;},clearTimeout:()=>{},process:{env:{WA_REPLACEMENT_PHONE:'436605565676',PAIRING_MIGRATION_TOKEN:'test-link',PAIRING_MIGRATION_EXPIRES:'4102444800000'}},useMultiFileAuthState:async dir=>({state:{dir,creds:{registered:dir.endsWith('436605565676')&&registered,me:{id:'436605565676:4@s.whatsapp.net'}}},saveCreds:()=>{}}),makeWASocket:config=>{
  const handlers={};const sock={user:{id:config.auth.dir.endsWith('436605565676')?'436605565676:4@s.whatsapp.net':'4368120528715:4@s.whatsapp.net'},handlers,ev:{on:(key,fn)=>handlers[key]=fn},end:()=>{sock.ended=true;handlers['connection.update']({connection:'close',lastDisconnect:{error:{output:{statusCode:500}}}});},requestPairingCode:async phone=>{assert.equal(phone,'436605565676');return 'ABCD1234';},newsletterMetadata:async()=>({id:'123@newsletter'}),groupFetchAllParticipating:async()=>({'120363431703780865@g.us':{id:'120363431703780865@g.us',subject:'TruckLink MENA'}})};sockets.push(sock);return sock;
  },DisconnectReason:{loggedOut:401},http:{createServer:handler=>{httpHandler=handler;return {listen:()=>{}};}},QRCode:{toString:async()=>'<svg></svg>'}});
  await vm.runInContext('(async()=>{'+source+';await startBot();globalThis.snapshot=()=>({status,replacementStatus,active:activeSocket?.user.id});})()',ctx);
  const request=async(path,method='GET')=>{const res={headers:{},setHeader:(k,v)=>res.headers[k]=v,writeHead:(status,headers)=>{res.status=status;Object.assign(res.headers,headers);},end:body=>res.body=body};await httpHandler({url:path,method},res);return res;};
- return {sockets,timers,ctx,request};
+ return {sockets,timers,ctx,request,relayConnections};
 }
 const t=await setup();assert.equal(t.sockets.length,2);const [old,next]=t.sockets;
 assert(t.ctx.snapshot().active.startsWith('4368120528715'));
@@ -35,3 +36,13 @@ const restart=await setup(true);assert.equal(restart.sockets.length,1);restart.s
 console.log('PASS: old account retained until pairing, protected QR/code, intended-number check, switch without logout/delete, restart on new session only');
 
 
+
+const transition=await setup();
+transition.sockets[0].handlers['connection.update']({connection:'open'});
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(transition.relayConnections.length,0,'legacy account must never start group relay');
+transition.sockets[1].handlers['connection.update']({connection:'open'});
+await new Promise(resolve=>setImmediate(resolve));
+assert.equal(transition.relayConnections.length,1);
+assert.equal(transition.relayConnections[0],transition.sockets[1]);
+console.log('PASS: only the verified replacement account activates channel-to-group relay');
