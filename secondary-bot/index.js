@@ -1,3 +1,4 @@
+import {createChannelGroupRelay,isRelayText} from './channel-group-relay.mjs';
 import {socketLogger} from './safe-logging.mjs';
 import {createDeliveryStore} from './delivery-store.mjs';
 import {createHash} from 'node:crypto';
@@ -744,10 +745,12 @@ function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
   if(reference.already_sent){await deliveryStore.put('outbox',adId,{...job,status:'sent'});return null;}
   if(!Number.isSafeInteger(reference.ad_number)||reference.ad_number<3000||!Number.isInteger(reference.daily_number)||reference.daily_number<1||!/^\d{4}-\d{2}-\d{2}$/.test(reference.day))throw new Error('Invalid publication reference');
   await deliveryStore.put('outbox',adId,{...job,status:'sending'});
-  const sent=await sock.sendMessage(channel,{text:formatChannelAd(parsed,text,reference),linkPreview:null});
+  const channelText=formatChannelAd(parsed,text,reference);
+  const sent=await sock.sendMessage(channel,{text:channelText,linkPreview:null});
   if(!sent?.key?.id)throw new Error('Channel message ID missing; review required');
   job={...job,status:'receipt',messageId:sent.key.id};
   await deliveryStore.put('outbox',adId,job);
+  await groupRelay.observeSent(channel,sent,channelText).catch(error=>console.warn('Group relay queue pending',String(error)));
   console.log('Channel publication sent',JSON.stringify({sourceId,messageId:sent.key.id,adId,ad_number:reference.ad_number}));
   for(let attempt=0;attempt<3;attempt++){
    try{await publicationNumber(adId,'confirm',sent.key.id);await deliveryStore.put('outbox',adId,{...job,status:'sent'});break;}
@@ -810,6 +813,7 @@ await Promise.all([learnPlacesFromPlatform(),verifyIngestConnection()]);
 const dir='/data/wa-session-secondary';
 await mkdir(dir,{recursive:true});
 const deliveryStore=await createDeliveryStore(dir+'/delivery-state.json');
+const groupRelay=await createChannelGroupRelay({path:dir+'/channel-group-relay.json'});
 let qr='',status='starting';
 let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
@@ -937,6 +941,7 @@ async function publishRequestedChannelPost(sock){
    if(!sent?.key?.id)throw new Error('No WhatsApp message ID returned');
    manualPublication={id:task.id,status:'sent',messageId:sent.key.id,at:new Date().toISOString()};
    await writeFile(receipt,JSON.stringify(manualPublication));
+   await groupRelay.observeSent(resolvedChannelJid,sent,task.text).catch(error=>console.warn('Group relay queue pending',String(error)));
    publishedChannel++;
    console.log('Requested channel post sent',JSON.stringify({...manualPublication,channel:resolvedChannelJid}));
  }catch(e){
@@ -972,9 +977,9 @@ async function connect(authDir=dir,candidate=false){
     }
     if(periodicGroupTimer)clearTimeout(periodicGroupTimer);periodicRefresh();
     if(retryTimer)clearTimeout(retryTimer);retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();
-    qr='';status='connected';channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
+    qr='';status='connected';groupRelay.connect(sock,()=>activeSocket===sock&&status==='connected');channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
-    channelReader?.stop();
+    channelReader?.stop();groupRelay.disconnect(sock);
     if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);if(retryTimer)clearTimeout(retryTimer);
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
@@ -995,6 +1000,8 @@ async function connect(authDir=dir,candidate=false){
      let freightKey=null,retryKey=null,messageCompleted=true;
      try{
        const jid=String(m.key?.remoteJid||'');
+       if(ownChannelJids().includes(jid)){await groupRelay.accept(m).catch(error=>console.warn('Group relay event pending',String(error)));continue;}
+       if(jid.endsWith('@g.us')&&isRelayText(getText(m.message)))continue;
        if(!acceptsFreightSource(jid,EXCLUDED_GROUPS,ownChannelJids()))continue;
        const fromChannel=isChannelJid(jid);
        if(fromChannel&&m.key?.fromMe)continue;
@@ -1095,7 +1102,7 @@ async function connect(authDir=dir,candidate=false){
  };
  retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();
  channelReader=createChannelReader({sock,isActive:()=>activeSocket===sock&&status==='connected',ownChannels:ownChannelJids,onMessages:enqueueMessages,statePath:authDir+'/channel-reader.json'});
- // No automatic private or group replies.
+ // No automatic private replies. Own-channel copies go only to the owner's verified group.
 }
 async function startBot(){
  if(!replacementDir){await connect();return;}
@@ -1128,7 +1135,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'route-transit-repair-20261016',delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-group-relay-20261017',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');

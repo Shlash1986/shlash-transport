@@ -59,7 +59,7 @@ export function decodeChannelMessages(root,jid,decode=bytes=>proto.Message.decod
 // Only read the channels already followed by the connected WhatsApp account.
 // The subscribed-list query is documented in WhiskeySockets/Baileys#1631.
 // Initial activation starts now, so enabling the reader never republishes history.
-export function createChannelReader({sock,isActive,ownChannels,onMessages,statePath,now=()=>Date.now(),listChannels,log=console}){
+export function createChannelReader({sock,isActive,ownChannels,onMessages,statePath,now=()=>Date.now(),listChannels,log=console,initialSince}){
  const state={enabled:true,status:'starting',followed:0,monitored:0,lastDiscoveryAt:null,lastPollAt:null,received:0,errors:0,lastError:null};
  const sources=new Map();
  let checkpoints={},initialized=false,stopped=false,busy=false,timer=null,nextDiscovery=0,cooldownUntil=0,discoveryError=null;
@@ -104,7 +104,8 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
     for(const channel of channels){
      if(!allowed(channel.id))continue;
      if(!sources.has(channel.id))sources.set(channel.id,{...channel,subscribeAt:0,pollAt:0,failures:0,lastError:null});
-     checkpoints[channel.id]??={since:seconds(),floor:seconds()};
+     const start=Number.isSafeInteger(initialSince)?Math.max(seconds()-86400,Math.min(seconds(),initialSince)):seconds();
+     checkpoints[channel.id]??={since:start,floor:start};
     }
     state.followed=channels.length;state.monitored=sources.size;state.lastDiscoveryAt=new Date(now()).toISOString();
     log.info('Followed WhatsApp channels',JSON.stringify(channels.map(c=>({...c,monitored:allowed(c.id)}))));

@@ -1,3 +1,6 @@
+import {isRelayText,formatGroupRelay} from './channel-group-relay.mjs';
+const relayEvents=[],relayPublications=[];
+const createChannelGroupRelay=async()=>({connect(){},disconnect(){},accept:async m=>relayEvents.push(m),observeSent:async(...args)=>relayPublications.push(args),snapshot:()=>({enabled:false})});
 import {createDeliveryStore as realDeliveryStore} from './delivery-store.mjs';
 import {socketLogger} from './safe-logging.mjs';
 const createDeliveryStore=()=>realDeliveryStore(null);
@@ -14,7 +17,7 @@ const callbacks={},requests=[],sent=[];
 let mode='success';
 let aiCalls=0;
 const sock={user:{id:'4368120528715:4@s.whatsapp.net'},groupMetadata:async()=>({participants:[{id:'99999999999999@lid',lid:'99999999999999@lid',jid:'963955111222@s.whatsapp.net'},{id:'88888888888888@lid',jid:'963955999888@s.whatsapp.net'}]}),ev:{on:(key,fn)=>callbacks[key]=fn},sendMessage:async(jid,payload)=>{assert(jid.endsWith('@newsletter'));sent.push({jid,payload});return {key:{id:'test-channel-id'}};}};
-const context=vm.createContext({createDeliveryStore,socketLogger,createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
+const context=vm.createContext({createChannelGroupRelay,isRelayText,createDeliveryStore,socketLogger,createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId,console,createHash,Map,Set,URL,Date,AbortSignal,setTimeout,clearTimeout,process:{env:{SUPABASE_URL:'https://example.test',SUPABASE_ANON_KEY:'test',TRUCKLINK_INGEST_TOKEN:'test',TARGET_CHANNEL_JID:'123@newsletter'}},useMultiFileAuthState:async()=>({state:{},saveCreds:()=>{}}),makeWASocket:config=>{assert.equal(config.shouldSyncHistoryMessage(),false);return sock;},http:{createServer:()=>({listen:()=>{}})},fetch:async(url,opts)=>{
  if(!opts.body){assert(url.includes('/rpc/get_load_feed_v6?'));assert(url.includes('select=from_city,from_country,to_city,to_country'));return {ok:true,json:async()=>[{from_city:'مدينة اختبار',from_country:'سوريا',to_city:'دبي',to_country:'الإمارات'},{from_city:'تضارب',from_country:'سوريا',to_city:'تضارب',to_country:'العراق'}]};}
  const body=JSON.parse(opts.body);
  if(url.endsWith('whatsapp_publication_number'))return {ok:true,json:async()=>body.p_action==='confirm'?{ready:true,sent:true}:{ready:true,ad_number:3000+sent.length,daily_number:59+sent.length,day:'2026-10-10',already_sent:false}};
@@ -198,3 +201,12 @@ await Promise.all([upsert([concurrent]),upsert([concurrent]),upsert([concurrent]
 assert.equal(requests.length,beforeConcurrent+1);assert.equal(sent.length,beforeConcurrentSent+1);
 assert.equal(getText({protocolMessage:{editedMessage:{conversation:'edited freight'}}}),'edited freight');
 console.log('PASS: concurrent events publish once and edited text is extracted');
+
+// Relay hooks cover both bot publications and manual own-channel events.
+assert.equal(relayPublications.length,sent.length);
+assert.equal(relayPublications.at(-1)[2],sent.at(-1).payload.text);
+assert(relayEvents.some(m=>m.key.id==='OWNCHANNEL'));
+const beforeRelayLoop=requests.length;
+await upsert([message('RELAYLOOP',formatGroupRelay('مطلوب براد من حلب إلى دمشق +963955111222'),'120363431703780865@g.us'),message('FORWARDEDRELAYLOOP',formatGroupRelay('مطلوب براد من حمص إلى دبي +963955111222'),'123@g.us')]);
+assert.equal(requests.length,beforeRelayLoop);
+console.log('PASS: channel-to-group hooks and cross-group relay loop prevention');

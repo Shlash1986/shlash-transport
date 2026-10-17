@@ -56,7 +56,7 @@ test('session logging never exposes key material but preserves operational failu
 test('failed numbering retries safely; successful send with failed receipt never resends; uncertain send stays blocked',async()=>{
  const code=source.slice(source.indexOf('let numberedChannelQueue='),source.indexOf('// Restore the old runner'));
  const store=await createDeliveryStore(null);let numberFails=true,receiptFails=false,uncertain=false,sends=0;
- const context=vm.createContext({deliveryStore:store,console,setTimeout,Date,AbortSignal,formatChannelAd:()=>'<ad>',process:{env:{}},fetch:async(url,opt)=>{
+ const context=vm.createContext({groupRelay:{observeSent:async()=>{}},deliveryStore:store,console,setTimeout,Date,AbortSignal,formatChannelAd:()=>'<ad>',process:{env:{}},fetch:async(url,opt)=>{
   const b=JSON.parse(opt.body);
   if(b.p_action==='reserve'&&numberFails)throw new Error('timeout before send');
   if(b.p_action==='confirm'&&receiptFails)throw new Error('receipt outage');
