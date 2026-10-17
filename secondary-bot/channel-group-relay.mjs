@@ -4,6 +4,9 @@ import {createChannelReader} from './channel-reader.mjs';
 
 export const RELAY_CHANNEL='120363428757778414@newsletter';
 export const RELAY_GROUP_INVITE='ENfU2aCppVa545mZW7W5Y3';
+// This exact invite-to-JID mapping is also used by refreshJoinedGroups in
+// index.js. Verify existing membership, not admission through an invite link.
+export const RELAY_GROUP='120363431703780865@g.us';
 export const RELAY_LINKS={
  site:'https://easttrucks.com/',
  channel:'https://whatsapp.com/channel/0029Vb88HmiK0IBl4La1aC1Q',
@@ -44,16 +47,15 @@ export async function createChannelGroupRelay({path,now=()=>Date.now(),log=conso
  async function resolveGroup(){
   if(group&&now()<verifyAt)return group;
   const current=sock;
-  const info=await current.groupGetInviteInfo(RELAY_GROUP_INVITE);
-  if(!info?.id?.endsWith('@g.us')||info.isCommunity)throw new Error('Invite must identify a message group');
-  const metadata=await current.groupMetadata(info.id);
+  const metadata=await current.groupMetadata(RELAY_GROUP);
+  if(metadata?.id!==RELAY_GROUP||metadata.isCommunity)throw new Error('Target must be the configured message group');
   const self=new Set([current.user?.id,current.user?.lid].filter(Boolean).map(identity));
   const member=(metadata.participants||[]).find(p=>[p.id,p.lid,p.jid,p.phoneNumber].some(id=>self.has(identity(id))));
   if(!member)throw new Error('Bot is not a member of the target group');
   if(metadata.announce&&!member.admin)throw new Error('Target group requires bot administrator permission');
   if(current!==sock||!active())throw new Error('Connection changed during group verification');
-  group={id:info.id};verifyAt=now()+5*60*1000;
-  state.groupResolved=true;state.groupName=metadata.subject||info.subject||null;
+  group={id:metadata.id};verifyAt=now()+5*60*1000;
+  state.groupResolved=true;state.groupName=metadata.subject||null;
   log.info('Channel group relay target verified',JSON.stringify({id:group.id,name:state.groupName}));
   return group;
  }

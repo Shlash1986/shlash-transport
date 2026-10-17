@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {createChannelGroupRelay,formatGroupRelay,isRelayText,RELAY_CHANNEL,RELAY_LINKS,RELAY_GROUP_INVITE} from './channel-group-relay.mjs';
+import {createChannelGroupRelay,formatGroupRelay,isRelayText,RELAY_CHANNEL,RELAY_LINKS,RELAY_GROUP} from './channel-group-relay.mjs';
 import {createChannelReader} from './channel-reader.mjs';
 import {proto} from '@whiskeysockets/baileys';
 
@@ -15,7 +15,7 @@ const stubReader=()=>({state:{status:'test'},start(){},stop(){}});
 const message=(id,text=BODY,stamp=BASE)=>({key:{remoteJid:RELAY_CHANNEL,id},message:{conversation:text},messageTimestamp:stamp/1000});
 async function setup({path=null,clock=()=>BASE,member=true,admin=false,announce=false,send}={}){
  const sent=[];
- const sock={user:{id:user},groupGetInviteInfo:async invite=>{assert.equal(invite,RELAY_GROUP_INVITE);return {id:group};},groupMetadata:async()=>({subject:'شاحنات الشرق',announce,participants:member?[{id:'123@s.whatsapp.net',admin:admin?'admin':null}]:[]}),sendMessage:async(jid,payload)=>{sent.push({jid,payload});return send?send():{key:{id:'group-'+sent.length}};}};
+ const sock={user:{id:user},groupGetInviteInfo:async()=>{throw new Error('growth-locked');},groupMetadata:async jid=>{assert.equal(jid,RELAY_GROUP);return {id:group,subject:'شاحنات الشرق',announce,participants:member?[{id:'123@s.whatsapp.net',admin:admin?'admin':null}]:[]};},sendMessage:async(jid,payload)=>{sent.push({jid,payload});return send?send():{key:{id:'group-'+sent.length}};}};
  const relay=await createChannelGroupRelay({path,now:clock,log:quiet,readerFactory:stubReader});
  relay.connect(sock,()=>true);await relay.drain();
  return {relay,sock,sent,stop:()=>relay.disconnect(sock)};
