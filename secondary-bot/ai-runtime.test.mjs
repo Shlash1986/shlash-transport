@@ -120,3 +120,20 @@ test('available trucks may have no destination',async()=>{
  const ai=await runtime(groq),truck={...result,kind:'truck_available',to_city:null,to_country:null};
  assert.deepEqual(await ai.extractFreightAd('شاحنة فاضية بحمص',{fetchImpl:async()=>response(truck)}),truck);
 });
+
+test('transient AI limits expose retry timing while permanent failures do not queue retries',async()=>{
+ let ai=await runtime(groq);const deferred=[];
+ const options={fetchImpl:async()=>response(),onDeferred:reason=>deferred.push(reason)};
+ await ai.extractFreightAd(freight+' 1',options);await ai.extractFreightAd(freight+' 2',options);
+ assert.equal(await ai.extractFreightAd(freight+' 3',options),null);
+ assert.equal(deferred[0].reason,'rate_limited');assert(deferred[0].retryAfterMs>0);
+ ai=await runtime(groq);deferred.length=0;
+ const limited={fetchImpl:async()=>({ok:false,status:429,headers:{get:()=> '120'}}),onDeferred:reason=>deferred.push(reason)};
+ await ai.extractFreightAd(freight,limited);await ai.extractFreightAd(freight,limited);
+ assert.equal(deferred.length,2);assert(deferred.every(d=>d.reason==='http_429'&&d.retryAfterMs>110000));
+ for(const fetchImpl of [async()=>({ok:false,status:401}),async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:'bad json'}}]})})]){
+  ai=await runtime(groq);deferred.length=0;
+  assert.equal(await ai.extractFreightAd(freight,{fetchImpl,onDeferred:reason=>deferred.push(reason)}),null);
+  assert.equal(deferred.length,0);
+ }
+});

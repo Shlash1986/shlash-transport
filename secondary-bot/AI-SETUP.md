@@ -33,11 +33,29 @@ otherwise Groq is the default. An unknown provider fails closed.
 - HTTP 429 honors Retry-After with at least 60 seconds of cooldown.
 - HTTP 401/403 pauses new inference for five minutes.
 - Timeout after 15 seconds, malformed output, refusal or truncation returns null.
+- Quota limits, HTTP 429, temporary server failures and network timeouts retain
+  the source message in the existing volume-backed retry journal for up to 24h.
+  Malformed output, refusals and authentication failures do not trigger retries.
 - The module never changes provider automatically or upgrades a billing plan.
 - Phone-like numbers, URLs and email addresses are redacted before inference.
   This is data minimization, not complete anonymization; ad text may contain names.
 - The module cannot send WhatsApp messages or choose a contact phone. Publication
   and the disabled group relay remain controlled by the existing application.
+
+## Freight priority and shorthand
+
+Syrian domestic, inbound and outbound freight, plus explicitly Syrian vehicles
+abroad, take priority among waiting messages, AI retries and pending channel posts.
+The current message finishes first; other countries continue in arrival order
+when no Syrian work is waiting. Explicit Syrian cities, country names and vehicle
+nationality are used, never the contact's phone prefix. `/health` reports
+`freightPriority: "syria_first"`.
+
+Lowbed spellings (`لوبد`, `لوابد`, `لوايد`), `أحمال` and route-shaped `قطعة من…`
+requests can reach AI. Counts, contacts and the original text stay intact; unclear
+or low-confidence output remains unpublished. Reversed route wording such as
+`أحمال على طرطوس من موصل` must retain Mosul as origin. Syrian plate nationality
+does not move a Dubai-based truck's origin to Syria.
 
 The Groq Free plan has both request and token limits. The documented
 `openai/gpt-oss-120b` baseline on 2026-10-18 is 30 requests/minute,

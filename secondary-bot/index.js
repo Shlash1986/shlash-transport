@@ -4,13 +4,14 @@ import {createDeliveryStore} from './delivery-store.mjs';
 import {createHash} from 'node:crypto';
 import {createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId} from './channel-reader.mjs';
 import {extractFreightAd,getAIStatus,isFreightCandidate} from './ai-runtime.mjs';
+import {createPriorityMessageQueue} from './priority-queue.mjs';
 const ARABIC_DIGITS                        = { "٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9","۰":"0","۱":"1","۲":"2","۳":"3","۴":"4","۵":"5","۶":"6","۷":"7","۸":"8","۹":"9" };
 function normalize(input=""){ return String(input).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d).replace(/[ـ\u064B-\u065F\u0670]/g,"").replace(/ی/g,"ي").replace(/ک/g,"ك").replace(/ہ/g,"ه").replace(/[إأآ]/g,"ا").replace(/ى/g,"ي").replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/\s+/g," ").trim(); }
 const cityCountry = new Map               ();
 function add(c       , cities         ){ for(const city of cities) cityCountry.set(normalize(city),c); }
 add("سوريا",["دمشق","الشام","شام","عين عاروس","عين عروس","عين العروس","حلب","إدلب","ادلب","سرمدا","باب الهوى","معبر باب الهوى","باب السلامة","باب سلامة","باب سلامه","باب السلامه","باب السلام","معبر باب السلام","جرابلس","الباب","الرقة","الحسكة","القامشلي","تدمر","حمص","حماة","حماه","طرطوس","بانياس","دير الزور","ديرالزور","اليعربية","اليعروبية","ساحة التبادل اليعربية","ساحة تبادل اليعربية","التنف","البوكمال","تل أبيض","رأس العين","خان العسل","نصيب","معبر نصيب","الدرباسية","رميلان","منبج","عفرين","عدرا","القحطانية","تل تمر","تل حميس"]);
 add("الأردن",["عمان","عمّان","جابر","معبر جابر","الرمثا","الزرقاء","العقبة","المعبر الشمالي","الشيخ حسين","سحاب","الأزرق","إربد","اربد"]);
-add("العراق",["بغداد","البصرة","الموصل","أربيل","اربيل","كركوك","ربيعة","القائم","كبيسة","الوليد","طريبيل","زرباطية","سنجار","بيجي","النجف","تكريت","سامراء","دهوك","السماوة","الحلة"]);
+add("العراق",["بغداد","البصرة","الموصل","موصل","أربيل","اربيل","كركوك","ربيعة","القائم","كبيسة","الوليد","طريبيل","زرباطية","سنجار","بيجي","النجف","تكريت","سامراء","دهوك","السماوة","الحلة"]);
 add("السعودية",["الرياض","جدة","جده","الدمام","الجبيل","جبيل","جيزان","جازان","مكة","مكه","المدينة","المدينه","تبوك","خميس مشيط","القصيم","قصيم","سدير","صعبر","ينبع","الطائف","حائل","بريدة","بريده","عنيزة","عنيزه","الخبر","الاحساء","الأحساء","نجران","أبها","ابها","حفر الباطن","حفرالباطن","رنية","الخرمة","أمالا","امالا","طريق الخرج","رابغ","ميناء رابغ"]);
 add("الإمارات",["دبي","أبوظبي","ابوظبي","الشارقة","الشارقه","العين"]);
 add("لبنان",["بيروت","طرابلس لبنان","البقاع","شتورا"]);
@@ -38,7 +39,7 @@ const trailers                   = [
   [/(?:مقطورات|مقطوره|مقطورة)/u,"مقطورة"],
   [/(?:صواني)/u,"صواني"],
   [/(?:قلاب|قلابات|غلاب)/u,"قلاب"],
-  [/(?:لوبد|لوبدات)/u,"لوبد"],
+  [/(?:^|[^\p{L}])(?:لوبد(?:ات|ين)?|لوابد|لوايد)(?=$|[^\p{L}])/u,"لوبد"],
   [/(?:صهريج|صهاريج|تنك\s*مغلق|تنك)/u,"صهريج"],
   [/(?:صندوق|كونتر|حافظه|حافظة|مقفول)/u,"صندوق مغلق"],
   [/(?:تريلا|تريله|تريلة)/u,"تريلا"],
@@ -46,7 +47,7 @@ const trailers                   = [
 ]
 
 // Extended freight vocabulary for Arabic WhatsApp postings.
-add("السعودية",["حايل","رابغ","رأس الخير","الخفجي","الوديعة","البطحاء","الحديثة","حالة عمار","ميناء جدة الإسلامي","ميناء الملك عبدالعزيز"]);
+add("السعودية",["حايل","طريف","رابغ","رأس الخير","الخفجي","الوديعة","البطحاء","الحديثة","حالة عمار","ميناء جدة الإسلامي","ميناء الملك عبدالعزيز"]);
 add("سوريا",["اللاذقية","ميناء اللاذقية","ميناء طرطوس","جديدة يابوس","كسب","الراعي","جوسية"]);
 add("الأردن",["العمري","المدورة","الكرامة","ميناء العقبة"]);
 add("العراق",["سفوان","الشلامجة","المنذرية","إبراهيم الخليل","أم قصر","ميناء الفاو"]);
@@ -119,10 +120,21 @@ function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){if(city==='القصيم بريدة'||city==='القصيم بريده')return 'بريدة';if(city==='باب الهواء'||city==='معبر باب الهواء')return 'باب الهوى';return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
+function canonicalPlace(city){if(city==='القصيم بريدة'||city==='القصيم بريده')return 'بريدة';if(city==='باب الهواء'||city==='معبر باب الهواء')return 'باب الهوى';return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','موصل':'الموصل','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
 function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])علتنف(?=$|[^\p{L}])/gu,'$1على التنف').replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
+function freightPriority(text){
+ const n=geographyText(text);
+ if(/\b(?:syria|syrian|damascus|aleppo|homs|hama|tartus|latakia|idlib|qamishli)\b/iu.test(n))return 0;
+ if(/(?:^|[^\p{L}])(?:ل|ب)?(?:سوريا|سورية|سوريه|سوري|السوريه|السورية|السوري)(?=$|[^\p{L}])/u.test(n))return 0;
+ for(const [city,country] of cityCountry){
+  if(country!=='سوريا')continue;
+  let at=n.indexOf(city);
+  while(at>=0){if(placeBoundary(n,at)&&(at+city.length===n.length||!/[\p{L}]/u.test(n[at+city.length])))return 0;at=n.indexOf(city,at+city.length);}
+ }
+ return 1;
+}
 const cargoWords=["مواد أولية","مواد اولية","مواد أوليه","مواد اوليه","انترلوك","مياه","اكياس جامبو","حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
@@ -213,6 +225,20 @@ function labeledRoute(text){
  const [from]=fields.from,[to]=fields.to;
  return {from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country};
 }
+// Dispatchers may name the delivery city before the loading city.
+function reversedFreightRoute(text){
+ const n=normalize(text);
+ const m=n.match(/(?:^|[^\p{L}])(?:احمال|حمولات|حموله|حمولة|حمل|تحميل)\s+(?:الى|الي|على|علي|ع)\s+(.+?)\s+من\s+(.+)$/u);
+ if(!m)return undefined;
+ const to=explicitEndpoint(m[1]),from=explicitEndpoint(m[2].split(/\s+(?:للتواصل|هاتف|رقم)(?=\s|:)|\s+(?=[+\d])/u)[0]);
+ if(!from||!to)return null;
+ return {from_city:from.city,from_country:from.country,to_city:to.city,to_country:to.country};
+}
+function availableDestinationCountry(text){
+ const m=normalize(text).match(/(?:^|[^\p{L}])(?:احمال|حمولات|حمل|حموله|حمولة)\s+(?:الى\s+|الي\s+|على\s+|علي\s+|ل)\s*([\p{L} ]+)$/u);
+ const endpoint=m&&explicitEndpoint(m[1]);
+ return endpoint?.city==='غير محددة'?endpoint.country:null;
+}
 // Keep a same-origin destination list in one ad, preserving the total truck count.
 function multiDestinationRoute(text){
  const lines=String(text||'').split(/[\r\n]+/u).map(normalize).filter(Boolean);
@@ -289,6 +315,7 @@ function loadingTransitRoute(text){
  return {from_city:canonicalPlace(from[0].city),from_country:from[0].country,to_city:canonicalPlace(to[0].city),to_country:to[0].country};
 }
 function route(text){
+ const reversed=reversedFreightRoute(text);if(reversed!==undefined)return reversed;
  const transit=loadingTransitRoute(text);if(transit!==undefined)return transit;
  const countryOnly=countryOnlyDestinationRoute(text);if(countryOnly)return countryOnly;
  const labeled=labeledRoute(text);if(labeled!==undefined)return labeled;
@@ -403,12 +430,12 @@ function count(text       ){
   const n=normalize(text);
   if(/(?:برادين|سيارتين|شاحنتين|سطحتين|ستارتين|قاطرتين|مقطورتين|تريلتين|قلابين|لوبدين)/u.test(n)) return 2;
   const words={تلت:3,ثلاث:3,ثلاثة:3,تلات:3,تلاتة:3,اربع:4,اربعة:4,خمس:5,خمسة:5,ست:6,ستة:6,سبع:7,سبعة:7,ثمان:8,ثمانية:8,تسع:9,تسعة:9,عشر:10,عشرة:10};
-  const wordCount=n.match(/(?:^|[^\p{L}])(تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?|ستة?|سبعة?|ثمانية|ثمان|تسعة?|عشرة?)\s+(?:برادات|سيارات|شاحنات|سطحات|ستائر|ستاير|قلابات|تريلات)(?=$|[^\p{L}])/u);
+  const wordCount=n.match(/(?:^|[^\p{L}])(تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?|ستة?|سبعة?|ثمانية|ثمان|تسعة?|عشرة?)\s+(?:برادات|سيارات|شاحنات|سطحات|ستائر|ستاير|قلابات|تريلات|لوابد|لوايد|لوبدات)(?=$|[^\p{L}])/u);
   if(wordCount)return words[wordCount[1]];
   const pats=[
     /(?:برادات|سطحات|شاحنات|سيارات|براد|ستارة|ستاره|شاحنة|سيارة|تريلا|سطحة)\s*(?:عدد)\s*(\d{1,3})(?!\d)/u,
-    /(?:مطلوب|نحتاج|يلزم)\s*(?:عدد\s*)?(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u,
-    /(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|صهريج|صهاريج)/u
+    /(?:مطلوب|نحتاج|يلزم)\s*(?:عدد\s*)?(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|لوابد|لوايد|صهريج|صهاريج)/u,
+    /(\d{1,3})\s*(?:سياره|سيارة|شاحنه|شاحنة|براد|برادات|ستاره|ستارة|ستاير|ستائر|سطحه|سطحة|سطحات|قلاب|قلابات|جوانب|جنابي|مقطوره|مقطورة|قاطره|قاطرة|تريلا|تريله|تريلة|اورفليه|أورفليه|لوبد|لوبدات|لوابد|لوايد|صهريج|صهاريج)/u
   ];
   for(const rx of pats){const m=n.match(rx);if(m)return Math.max(1,Math.min(100,Number(m[1])));}
   return 1;
@@ -479,7 +506,7 @@ function availabilityRoute(raw       ){
 // Only explicit vehicle availability counts; fuel, cargo and advances may also be available.
 function hasAvailableVehicle(raw){
  const n=normalize(raw);
- const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|ا|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات)?|صهريج|صهاريج|دينا|تك|انتر|بورتر|جنابي)';
+ const vehicle='(?:شاحن(?:ة|ه|ات|تين)|سيار(?:ة|ه|ات|تين)|براد(?:ات|ين)?|تريل(?:ا|ة|ه|ات)|ستار(?:ة|ه|ا|تين)?|ستائر|ستاير|سطح(?:ة|ه|ات|تين)|قلاب(?:ات|ين)?|قاطر(?:ة|ه)|مقطور(?:ة|ه)|لوبد(?:ات|ين)?|لوابد|لوايد|صهريج|صهاريج|دينا|تك|انتر|بورتر|جنابي)';
  const state='(?:متوفر(?:ة|ه|ين)?|متاح(?:ة|ه)?|موجود(?:ة|ه|ين)?|جاهز(?:ة|ه|ين)?|فاضي(?:ة|ه|ين)?|فارغ(?:ة|ه|ين)?)';
  const gap='\\s*(?:عدد\\s*)?(?:\\d+\\s*)?(?:(?:هنداي|هيونداي|كيا|ايسوزو)\\s*)?';
  const seekingLoad=/(?:^|[^\p{L}])لعندو\s+شي(?=$|[^\p{L}])|(?:اللي|الي|يلي|العندو|ال?عنده|مين)\s*(?:عندو|عنده)?\s*(?:شي|شغل|حمل|حموله|حمولة)[\s\S]{0,50}(?:يخبر|يحكي|يتواصل)|(?:بدور|عم دور|ابحث|نبحث|بدنا|بدي)\s*(?:على|عن)?\s*(?:حمل|حموله|حمولة|شغل)|(?:الحواليه|الحواليو|اللي\s+حواليه|الي\s+حواليه)\s+شي/u.test(n);
@@ -528,6 +555,8 @@ function parse(rawText       ,fallbackContact            =null){
   const vehicleRequest=/(?:مطلوب(?:ه|ة|ين)?|يلزم(?:نا|ني)?|لازم(?:نا|ني)|نحتاج|بدنا|بدي|نبي)\s*(?:عدد\s*)?(?:(?:\d+|تلت|ثلاثة?|تلاتة?|اربعة?|خمسة?)\s*)?(?:براد|سطح|ستار|ستاير|ستائر|شاحن|سيار|تريل|قلاب|قاطر|مقطور|لوبد)/u.test(n);
   const truckAvailable=!vehicleRequest&&availabilityHint;
   const rt=(truckAvailable?colloquialAvailabilityArea(freightText)||availableAreaRoute(freightText):null)||route(freightText)||(truckAvailable?trainedFreightRoute(freightText,true):null);
+  const destinationCountry=truckAvailable&&availableDestinationCountry(freightText);
+  if(rt&&destinationCountry&&(!rt.to_city||rt.to_city==='غير محدد')){rt.to_city=null;rt.to_country=destinationCountry;}
   if(rt?.from_city==='حما')rt.from_city='حماة';
   if(rt?.to_city==='حما')rt.to_city='حماة';
   const rawPh=phone(text);
@@ -686,6 +715,10 @@ function validateAIParse(text,data,fallbackContact){
  };
  const from=place(data.from_city,data.from_country),to=data.to_city==null?null:place(data.to_city,data.to_country);
  if(!from||(data.kind==='load'&&!to)||(data.to_city!=null&&!to))return null;
+ const reversed=reversedFreightRoute(text);
+ if(reversed===null)return null;
+ const directed=reversed||explicitRoute(normalize(text));
+ if(directed&&(from.city!==directed.from_city||from.country!==directed.from_country||to?.city!==directed.to_city||to?.country!==directed.to_country))return null;
  const contact=normalizeContact(phone(text),fallbackContact,from.country);
  if(!contact)return null;
  const literal=(value)=>typeof value==='string'&&value.length<=80&&normalize(text).includes(normalize(value))?value:null;
@@ -1048,7 +1081,18 @@ async function connect(authDir=dir,candidate=false){
        const preliminary=parse(text,senderPhone);
        let finalParsed=preliminary;
        if(!finalParsed.publishable&&isFreightCandidate(text)&&(phone(text)||senderPhone||contactFromJid(sender))){
-         const ai=await extractFreightAd(text);
+         let deferred=null;
+         // A fresh Gulf message must not consume the next AI slot while Syrian
+         // freight is already waiting for its retry timer after a quota limit.
+         const syrianWaiting=freightPriority(text)>0&&Object.entries(deliveryStore.data.retries).some(([key,job])=>key!==retryKey&&job.aiDeferred&&Date.now()-Number(job.message.messageTimestamp)*1000<86400000&&freightPriority(getText(job.message.message))===0);
+         if(syrianWaiting)deferred={reason:'syria_priority',retryAfterMs:30000};
+         const ai=deferred?null:await extractFreightAd(text,{onDeferred:reason=>{deferred=reason;}});
+         if(deferred){
+           completed=false;messageCompleted=false;
+           await deliveryStore.put('retries',retryKey,{...deliveryStore.data.retries[retryKey],aiDeferred:true,next:Date.now()+Math.max(30000,deferred.retryAfterMs)});
+           console.log('AI freight deferred',JSON.stringify({id:messageId,priority:freightPriority(text)===0?'syria':'other',reason:deferred.reason}));
+           continue;
+         }
          const recovered=validateAIParse(text,ai,senderPhone||contactFromJid(sender));
          if(recovered){finalParsed=recovered;console.log('AI freight recovered',JSON.stringify({id:m.key.id,kind:recovered.kind}));}
        }
@@ -1095,18 +1139,17 @@ async function connect(authDir=dir,candidate=false){
    return completed;
  };
  // Serialize events to avoid processing a source message twice concurrently.
- let messageWork=Promise.resolve();
- const enqueueMessages=batch=>{const task=messageWork.then(()=>handleMessages(batch));messageWork=task.catch(error=>console.error('Message worker error',String(error)));return task;};
+ const enqueueMessages=createPriorityMessageQueue({handleBatch:handleMessages,priority:m=>freightPriority(getText(m.message)),onError:error=>console.error('Message worker error',String(error))});
  sock.ev.on('messages.upsert',enqueueMessages);
  const retryPending=async()=>{
   try{
    if(activeSocket===sock&&status==='connected'){
-    const due=Object.entries(deliveryStore.data.retries).filter(([,job])=>job.next<=Date.now()).slice(0,20);
+    const due=Object.entries(deliveryStore.data.retries).filter(([,job])=>job.next<=Date.now()).sort(([,a],[,b])=>freightPriority(getText(a.message.message))-freightPriority(getText(b.message.message))).slice(0,20);
     for(const [key,job] of due){
      if(Date.now()-Number(job.message.messageTimestamp)*1000>86400000){await deliveryStore.remove('retries',key);console.warn('Ingest retry expired',key);continue;}
      await enqueueMessages({type:'notify',messages:[job.message]});
     }
-    for(const [adId,job] of Object.entries(deliveryStore.data.outbox).filter(([,j])=>['pending','receipt'].includes(j.status)&&j.next<=Date.now()).slice(0,20)){
+    for(const [adId,job] of Object.entries(deliveryStore.data.outbox).filter(([,j])=>['pending','receipt'].includes(j.status)&&j.next<=Date.now()).sort(([,a],[,b])=>freightPriority(a.text)-freightPriority(b.text)).slice(0,20)){
      if(Date.now()-job.at>86400000&&job.status==='pending'){await deliveryStore.put('outbox',adId,{...job,status:'expired'});continue;}
      try{const sent=await sendNumberedChannelAd(sock,String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||job.channel||''),job.parsed,job.text,adId,job.sourceId);if(sent?.key?.id)publishedChannel++;}
      catch(error){const current=deliveryStore.data.outbox[adId];await deliveryStore.put('outbox',adId,{...current,next:Date.now()+60000});console.warn('Channel delivery pending',JSON.stringify({adId,status:current.status,error:String(error).slice(0,160)}));}
@@ -1153,7 +1196,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-session-recovery-20261018',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'syria-priority-shorthand-20261018',freightPriority:'syria_first',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
