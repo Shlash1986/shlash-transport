@@ -111,6 +111,7 @@ trailers.unshift([/(?:^|[^\p{L}])تك(?=$|[^\p{L}])/u,"تك"],[/(?:^|[^\p{L}])ا
 add("سوريا",["سرمده","الدانا","دانا"]);
 add("السعودية",["ميناء ينبع التجاري","ميناء نيوم","ملهم","الدوادمي","الدوادمى"]);
 add("مصر",["القطامية","القطاميه","الإسكندرية","اسكندريه","مطار القاهرة","مطار القاهره","مطار القاهره قرية البضائع"]);
+add("السعودية",["القصيم بريدة","القصيم بريده"]);
 trailers.unshift([/(?:^|[^\p{L}])ستارا(?=$|[^\p{L}])/u,"ستارة"]);
 function placeBoundary(text,index){
  // "باب" is a border/door word, never the Yemeni city "إب" with a ب prefix.
@@ -118,10 +119,10 @@ function placeBoundary(text,index){
  if(index===0||!/[\p{L}]/u.test(text[index-1]))return true;
  return /(?:^|[^\p{L}])(?:ب|ل|ع)$/u.test(text.slice(0,index));
 }
-function canonicalPlace(city){if(city==='باب الهواء'||city==='معبر باب الهواء')return 'باب الهوى';return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
+function canonicalPlace(city){if(city==='القصيم بريدة'||city==='القصيم بريده')return 'بريدة';if(city==='باب الهواء'||city==='معبر باب الهواء')return 'باب الهوى';return ({'جده ساحه بالخمره':'جدة الخمرة','جدة ساحة بالخمرة':'جدة الخمرة','جده الخمره':'جدة الخمرة','المزاحميه':'المزاحمية','باب سلامة':'باب السلامة','باب سلامه':'باب السلامة','باب السلامه':'باب السلامة','الدوادمي':'الدوادمي','الدوادمى':'الدوادمي','سرمده':'سرمدا','دانا':'الدانا','حسيا':'حسياء','عزاز':'أعزاز','اعزاز':'أعزاز','حايل':'حائل','حما':'حماة','حماه':'حماة','لاذقيه':'اللاذقية','اللاذقيه':'اللاذقية','باب لهوى':'باب الهوى','باب لهوا':'باب الهوى','باب لهوي':'باب الهوى','باب الهوا':'باب الهوى','باب الهوي':'باب الهوى','باب الهوه':'باب الهوى','اليعروبيه':'اليعربية','اليعربيه':'اليعربية','اليعروبية':'اليعربية','نصبيض':'نصيب','قحطانيه':'القحطانية','قحطانية':'القحطانية','الشام':'دمشق','شام':'دمشق','جده':'جدة','حفرالباطن':'حفر الباطن','مكه':'مكة','المدينه':'المدينة','الاحساء':'الأحساء','ابها':'أبها'})[city]||city;}
 // Expand the contracted destination prefix only for geographical matching:
 // للباب -> لالباب, للشام -> لالشام. Keep the original advertisement intact.
-function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
+function geographyText(text){return normalize(text).replace(/(^|[^\p{L}])علتنف(?=$|[^\p{L}])/gu,'$1على التنف').replace(/(^|[^\p{L}])قامشلي(?=$|[^\p{L}])/gu,'$1القامشلي').replace(/(^|[^\p{L}])بلقامشلي(?=$|[^\p{L}])/gu,'$1بالقامشلي').replace(/(^|[^\p{L}])بل(?:يعرب|يعروب)(?:ية|يه)(?=$|[^\p{L}])/gu,'$1باليعربية').replace(/(^|[^\p{L}])لل(?=[\p{L}])/gu,'$1لال');}
 const cargoWords=["مواد أولية","مواد اولية","مواد أوليه","مواد اوليه","انترلوك","مياه","اكياس جامبو","حمضيات","برتقال","ليمون","بطاطة","قطن","أقطان","اقطان","خيوط","طحين","اسمنت","إسمنت","اكلنكر","كلنكر","ملح","بندورة","طماطم","مجمدات","بيض","حديد","خشب","سكر","رز","أرز","بطاطا","بطاطس","فواكه","خضار","خضرة","حنطة","قمح","نخالة","تمور","معدات","أدوات صحية","جبنة","جبنه","فروج","دجاج","كولا","أغنام","اغنام","حاويات","خزانات","زيت","زيوت","رخام","بلاط","ورق","كرتون","أعلاف","اعلاف"];
 function cleanPlace(s=""){return s.replace(/^(?:مطلوب|مطلوبه|نحتاج|تحميل|حموله|حمولة|سياره|سيارة|شاحنه|شاحنة|براد|ستاره|ستارة|سطحه|سطحة|قلاب|\d+)\s+/u,"").replace(/\s+(?:وزن|حموله|حمولة|تحميل|مطلوب|يوجد|متوفر|سلفه|سلفة|السعر|للتواصل|اتصال).*$/u,"").replace(/[،,.;:]+$/g,"").trim();}
 function editDistance(a       ,b       ){
@@ -819,6 +820,7 @@ let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
 let activeSocket=null;
 const reconnectTimers=new Map();
+const reconnectAttempts=new Map();
 const replacementPhone=String(process.env.WA_REPLACEMENT_PHONE||'');
 if(replacementPhone&&!/^[1-9][0-9]{8,14}$/.test(replacementPhone))throw new Error('Invalid replacement phone');
 const replacementSession=String(process.env.WA_REPLACEMENT_SESSION||'');
@@ -878,6 +880,7 @@ async function syncChannelBrand(sock,metadata){
 
 let groupRefreshInFlight=false;
 let groupRefreshCooldownUntil=0;
+let groupNextRefreshAt=0,groupRefreshAccount='';
 const verifiedRequestedGroups=new Map();
 async function verifyRequestedMembership(sock,info){
  try{
@@ -893,7 +896,13 @@ async function verifyRequestedMembership(sock,info){
 async function refreshJoinedGroups(sock,joinRequested=false){
  if(activeSocket!==sock||groupRefreshInFlight||Date.now()<groupRefreshCooldownUntil)return;
  if(replacementPhone&&String(sock.user?.id||'').split('@')[0].split(':')[0]!==replacementPhone)return;
+ const account=senderIdentity(sock.user?.id);
+ if(groupRefreshAccount!==account){groupRefreshAccount=account;groupNextRefreshAt=0;}
+ // groupFetchAllParticipating itself produces group events. Do not turn those
+ // notifications into a minute-by-minute refresh loop, including on reconnect.
+ if(Date.now()<groupNextRefreshAt)return;
  groupRefreshInFlight=true;
+ groupNextRefreshAt=Date.now()+15*60*1000;
  try{
   let groups=await sock.groupFetchAllParticipating();
   if(joinRequested){
@@ -918,6 +927,7 @@ async function refreshJoinedGroups(sock,joinRequested=false){
   }
   if(activeSocket!==sock)return;
   groupCount=Object.keys(groups).length;monitoredGroupCount=Object.keys(groups).filter(jid=>!EXCLUDED_GROUPS.has(jid)).length;groupCheckError='';
+  groupNextRefreshAt=Date.now()+12*60*60*1000;
   console.log('Group monitoring policy',JSON.stringify({excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount}));
   if(process.env.BOT_LOG_LEVEL==='debug')console.log('Joined WhatsApp group names',JSON.stringify(Object.values(groups).map(g=>({name:g.subject||'بدون اسم',id:g.id}))));
  }catch(e){groupCheckError=String(e);if(/rate.overlimit|rate-overlimit|429/i.test(groupCheckError))groupRefreshCooldownUntil=Date.now()+60*60*1000;console.error('Group refresh failed',String(e));}
@@ -957,7 +967,7 @@ async function connect(authDir=dir,candidate=false){
  const sock=makeWASocket({logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
- let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null,retryTimer=null;
+ let groupRefreshTimer=null,periodicGroupTimer=null,channelReader=null,retryTimer=null,openedAt=0;
  const scheduleGroupRefresh=()=>{if(groupRefreshTimer)clearTimeout(groupRefreshTimer);groupRefreshTimer=setTimeout(()=>{groupRefreshTimer=null;void refreshJoinedGroups(sock);},60000);};
  const periodicRefresh=()=>{periodicGroupTimer=setTimeout(async()=>{if(activeSocket!==sock)return;await refreshJoinedGroups(sock);periodicRefresh();},12*60*60*1000);periodicGroupTimer.unref?.();};
  sock.ev.on('groups.upsert',scheduleGroupRefresh);
@@ -966,12 +976,13 @@ async function connect(authDir=dir,candidate=false){
  sock.ev.on('connection.update',({connection,lastDisconnect,qr:nextQR})=>{
    if(nextQR){if(candidate){replacementQr=nextQR;replacementStatus='scan';}else{qr=nextQR;status='scan';}}
    if(connection==='open'){
+    openedAt=Date.now();
     if(candidate){
       const linked=String(sock.user?.id||'').split('@')[0].split(':')[0];
       if(linked!==replacementPhone){replacementStatus='wrong_number';replacementQr='';replacementCode='';pendingSocket=null;sock.end(new Error('Unexpected account'));return;}
       const previous=activeSocket;
       activeSocket=sock;pendingSocket=sock;replacementStatus='connected';replacementQr='';replacementCode='';
-      resolvedChannelJid='';groupCount=null;monitoredGroupCount=null;
+      resolvedChannelJid='';if(senderIdentity(previous?.user?.id)!==senderIdentity(sock.user?.id)){groupCount=null;monitoredGroupCount=null;}
       if(previous&&previous!==sock)previous.end(new Error('Account replaced by owner'));
       console.log('Replacement WhatsApp account activated',JSON.stringify({last4:linked.slice(-4)}));
     }
@@ -987,7 +998,11 @@ async function connect(authDir=dir,candidate=false){
     if(waiting){replacementQr='';replacementCode='';replacementStatus=code===DisconnectReason.loggedOut?'logged_out':'reconnecting';}
     console.warn('WhatsApp disconnected',code);
     if((selected||waiting)&&code!==DisconnectReason.loggedOut&&!reconnectTimers.has(authDir)){
-      reconnectTimers.set(authDir,setTimeout(()=>{reconnectTimers.delete(authDir);connect(authDir,candidate).catch(e=>console.error('Reconnect error',String(e)));},7000));
+      const attempts=openedAt&&Date.now()-openedAt>=60000?0:(reconnectAttempts.get(authDir)||0);
+      reconnectAttempts.set(authDir,attempts+1);
+      const delay=Math.min(300000,7000*2**Math.min(attempts,6));
+      console.log('WhatsApp reconnect scheduled',JSON.stringify({delayMs:delay}));
+      reconnectTimers.set(authDir,setTimeout(()=>{reconnectTimers.delete(authDir);connect(authDir,candidate).catch(e=>console.error('Reconnect error',String(e)));},delay));
     }
    }
  });
@@ -1135,7 +1150,7 @@ http.createServer(async(req,res)=>{
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
  }
- if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-group-session-20261017',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
+ if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'channel-pressure-recovery-20261018',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
  if(!token||u.searchParams.get('token')!==token){res.writeHead(403);res.end('Forbidden');return;}
  res.setHeader('Cache-Control','no-store');
