@@ -16,7 +16,7 @@ const message=(id,text=BODY,stamp=BASE)=>({key:{remoteJid:RELAY_CHANNEL,id},mess
 async function setup({path=null,clock=()=>BASE,member=true,admin=false,announce=false,send}={}){
  const sent=[];
  const sock={user:{id:user},groupGetInviteInfo:async()=>{throw new Error('growth-locked');},groupMetadata:async jid=>{assert.equal(jid,RELAY_GROUP);return {id:group,subject:'شاحنات الشرق',announce,participants:member?[{id:'123@s.whatsapp.net',admin:admin?'admin':null}]:[]};},sendMessage:async(jid,payload)=>{sent.push({jid,payload});return send?send():{key:{id:'group-'+sent.length}};}};
- const relay=await createChannelGroupRelay({path,now:clock,log:quiet,readerFactory:stubReader});
+ const relay=await createChannelGroupRelay({path,now:clock,log:quiet,readerFactory:stubReader,enabled:true});
  relay.connect(sock,()=>true);await relay.drain();
  return {relay,sock,sent,stop:()=>relay.disconnect(sock)};
 }
@@ -25,6 +25,24 @@ test('links added once while preserving route and original contact',()=>{
  for(const link of Object.values(RELAY_LINKS))assert.equal(output.split(link).length-1,1);
  assert(output.startsWith(BODY));assert(isRelayText(output));assert.equal(formatGroupRelay(output),output);
  assert(!isRelayText(BODY+'\n'+RELAY_LINKS.site));
+});
+test('group forwarding defaults off: no new messages or persisted pending jobs are sent',async()=>{
+ const dir=await mkdtemp(join(tmpdir(),'easttrucks-relay-disabled-'));
+ const path=join(dir,'relay.json');
+ try{
+  const previous=await setup({path,member:false});
+  await previous.relay.accept(message('pending'));await previous.relay.drain();previous.stop();
+  const before=await readFile(path,'utf8');
+  assert.equal(previous.relay.snapshot().pending,1);
+  const relay=await createChannelGroupRelay({path,now:()=>BASE+120000,readerFactory:()=>{throw new Error('Disabled relay must not start a reader');}});
+  const sock={groupMetadata:async()=>{throw new Error('Disabled relay must not inspect groups');},sendMessage:async()=>{throw new Error('Disabled relay must not send');}};
+  relay.connect(sock,()=>true);
+  assert.equal(await relay.accept(message('new')),false);
+  assert.equal(await relay.observeSent(RELAY_CHANNEL,{key:{id:'channel-published'}},BODY),false);
+  await relay.drain();relay.disconnect(sock);
+  assert.equal(relay.snapshot().enabled,false);assert.equal(relay.snapshot().status,'disabled');
+  assert.equal(await readFile(path,'utf8'),before);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('only new posts from the specified channel, once across realtime, send acknowledgment and polling IDs',async()=>{
  const t=await setup();

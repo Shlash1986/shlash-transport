@@ -35,7 +35,14 @@ const identity=jid=>String(jid||'').replace(/:\d+@/,'@');
 // Dedicated, durable queue: failures here never block publishing on the platform
 // or channel. No old posts are imported on initial activation, and an uncertain
 // WhatsApp send is held for review instead of being blindly sent a second time.
-export async function createChannelGroupRelay({path,now=()=>Date.now(),log=console,readerFactory=createChannelReader}={}){
+export async function createChannelGroupRelay({path,now=()=>Date.now(),log=console,readerFactory=createChannelReader,enabled=process.env.CHANNEL_GROUP_RELAY_ENABLED==='true'}={}){
+ // Group forwarding is opt-in. Channel/platform publication stays independent.
+ // Return before opening the durable queue so old pending posts cannot resume.
+ if(!enabled)return {
+  accept:async()=>false,observeSent:async()=>false,
+  connect(){},disconnect(){},drain:async()=>{},
+  snapshot:()=>({enabled:false,status:'disabled',groupResolved:false,groupName:null,lastSentAt:null,lastError:null,unsupported:0,since:null,pending:0,sent:0,uncertain:0,reader:null})
+ };
  const store=await createDeliveryStore(path,now);
  if(!Number.isFinite(store.data.relaySince)){store.data.relaySince=Math.floor(now()/1000)*1000;await store.save();}
  let sock=null,isActive=()=>false,reader=null,timer=null,group=null,verifyAt=0,cooldownUntil=0;
