@@ -1,3 +1,4 @@
+import {definitelyUnsent} from './connection-recovery.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -56,7 +57,7 @@ test('session logging never exposes key material but preserves operational failu
 test('failed numbering retries safely; successful send with failed receipt never resends; uncertain send stays blocked',async()=>{
  const code=source.slice(source.indexOf('let numberedChannelQueue='),source.indexOf('// Restore the old runner'));
  const store=await createDeliveryStore(null);let numberFails=true,receiptFails=false,uncertain=false,sends=0;
- const context=vm.createContext({groupRelay:{observeSent:async()=>{}},deliveryStore:store,console,setTimeout,Date,AbortSignal,formatChannelAd:()=>'<ad>',process:{env:{}},fetch:async(url,opt)=>{
+ const context=vm.createContext({definitelyUnsent,status:'connected',groupRelay:{observeSent:async()=>{}},deliveryStore:store,console,setTimeout,Date,AbortSignal,formatChannelAd:()=>'<ad>',process:{env:{}},fetch:async(url,opt)=>{
   const b=JSON.parse(opt.body);
   if(b.p_action==='reserve'&&numberFails)throw new Error('timeout before send');
   if(b.p_action==='confirm'&&receiptFails)throw new Error('receipt outage');
@@ -64,6 +65,7 @@ test('failed numbering retries safely; successful send with failed receipt never
  }});
  vm.runInContext(code+';globalThis.send=sendNumberedChannelAd',context);
  const sock={sendMessage:async()=>{sends++;if(uncertain)throw new Error('ack lost');return {key:{id:'confirmed-message'}};}};
+ context.activeSocket=sock;
  await assert.rejects(()=>context.send(sock,'123@newsletter',{},'text','ad-one','source-one'));
  assert.equal(store.data.outbox['ad-one'].status,'pending');assert.equal(sends,0);
  numberFails=false;receiptFails=true;await context.send(sock,'123@newsletter',{},'text','ad-one','source-one');assert.equal(sends,1);assert.equal(store.data.outbox['ad-one'].status,'receipt');
