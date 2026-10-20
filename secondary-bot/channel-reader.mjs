@@ -106,6 +106,12 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
   state.errors++;state.status='degraded';state.lastError=String(error?.message||error).slice(0,180);
   log.warn('Channel reader error',state.lastError);
   if(/rate.overlimit|429/i.test(state.lastError)){cooldownUntil=now()+60*60*1000;state.cooldownUntil=new Date(cooldownUntil).toISOString();}
+  // Repeated WA query timeouts indicate an unhealthy channel connection.
+  // Pause channel polling briefly without interrupting group message intake.
+  else if(/timed out|timeout|init queries/i.test(state.lastError)){
+   cooldownUntil=Math.max(cooldownUntil,now()+5*60*1000);
+   state.cooldownUntil=new Date(cooldownUntil).toISOString();
+  }
  }
  async function tick(){
   if(stopped||busy||!isActive()||now()<cooldownUntil)return;
