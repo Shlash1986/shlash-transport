@@ -645,7 +645,7 @@ function formatChannelAd(parsed,rawText='',publication=null){
  }
  if(details.length)lines.push('','📝 التفاصيل:',...details);
  if(contact)lines.push('','📞 للتواصل:','\u200e'+contact+'\u200e');
- lines.push('','🌐 شاحنات الشرق','https://easttrucks.com/');
+ lines.push('','🌐 شاحنات الشرق','https://easttrucks.com/','','🚛 أكثر من 500 حمولة يومياً','📲 حمّل تطبيق شاحنات الشرق الأوسط مجاناً');
  return lines.join('\n');
 }
 
