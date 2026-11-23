@@ -1,4 +1,4 @@
-import {createChannelGroupRelay,isRelayText} from './channel-group-relay.mjs';
+import {createChannelGroupRelay,isRelayText,cleanFreightLinks} from './channel-group-relay.mjs';
 import {socketLogger} from './safe-logging.mjs';
 import {createDeliveryStore} from './delivery-store.mjs';
 import {createHash} from 'node:crypto';
@@ -597,7 +597,7 @@ function formatChannelAd(parsed,rawText='',publication=null){
  const known=value=>value&&!/غير محدد/u.test(String(value))?String(value).trim():'';
  const vehicle=known(l.required_trailer_type);
  const contact=l.contact_phone||l.contact_whatsapp||'';
- const clean=String(rawText).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d)
+ const clean=cleanFreightLinks(rawText).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d)
   .replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'')
   .replace(/https?:\/\/trucklink-mena\.netlify\.app\/?(?:[^\s]*)/giu,'')
   .replace(/\+?\d[\d ()-]{7,}\d/g,number=>normalizeContact(number,null,l.from_country)===contact?'':number)
@@ -646,7 +646,7 @@ function formatChannelAd(parsed,rawText='',publication=null){
  if(details.length)lines.push('','📝 التفاصيل:',...details);
  if(contact)lines.push('','📞 للتواصل:','\u200e'+contact+'\u200e');
  lines.push('','🌐 شاحنات الشرق','https://easttrucks.com/','','🚛 أكثر من 500 حمولة يومياً','📲 حمّل تطبيق شاحنات الشرق الأوسط مجاناً');
- return lines.join('\n');
+ return cleanFreightLinks(lines.join('\n'));
 }
 
 // Split repeated requests before parsing. Share only a sole trailing contact,
@@ -991,7 +991,7 @@ async function publishRequestedChannelPost(sock){
  catch(e){if(e.code==='EEXIST'){try{manualPublication=JSON.parse(await readFile(receipt,'utf8'));}catch{}return;}throw e;}
  manualPublication={id:task.id,status:'sending'};
  try{
-   const sent=await sock.sendMessage(resolvedChannelJid,{text:task.text,linkPreview:null});
+   const sent=await sock.sendMessage(resolvedChannelJid,{text:cleanFreightLinks(task.text),linkPreview:null});
    if(!sent?.key?.id)throw new Error('No WhatsApp message ID returned');
    manualPublication={id:task.id,status:'sent',messageId:sent.key.id,at:new Date().toISOString()};
    await writeFile(receipt,JSON.stringify(manualPublication));
