@@ -14,8 +14,26 @@ export const RELAY_LINKS={
 };
 const DAY=86400000;
 export function isRelayText(text){return Object.values(RELAY_LINKS).every(link=>String(text||'').includes(link));}
+// Compare complete destinations. Ignore sharing parameters only on the official invites.
+export function cleanFreightLinks(value){
+ const allowed=Object.values(RELAY_LINKS);
+ const webLink=/(?:[a-z][a-z0-9+.-]*:\/\/[^\s<>]+|(?:www\.|(?:[\p{L}\d-]+\.)+)[\p{L}]{2,63}(?::\d+)?(?:[/?#][^\s<>]*)?)/giu;
+ return String(value??'').replace(/[\u200b\u200e\u200f\u202a-\u202e\u2066-\u2069]/gu,'').split(/\r?\n/u).map(line=>{
+  line=line.replace(/(?:⏰\s*)?شفت\s+الحمولة\s+متأخر[؟?]?|حم[ّ]?ل\s+تطبيق\s+نقليات(?:\s+وتوصلك)?|إشعارات\s+فورية\s+بكل\s+حمولة|جديدة\s+أول\s+ما\s+تنزل(?:\s*[🔔👇])*/gu,'');
+  return line.replace(webLink,token=>{
+   const target=token.replace(/[.,،؛!?؟)*]+$/u,'');
+   try{
+    const url=new URL(/^[a-z][\w+.-]*:\/\//iu.test(target)?target:'https://'+target);
+    if(url.protocol!=='https:'||url.username||url.password)return '';
+    const canonical=url.origin+url.pathname;
+    if(allowed.includes(canonical))return canonical;
+   }catch{}
+   return '';
+  }).trimEnd();
+ }).join('\n').replace(/\n{3,}/gu,'\n\n').trim();
+}
 export function formatGroupRelay(text){
- const body=String(text||'').trim();
+ const body=cleanFreightLinks(text);
  const links=[['🌐 منصة شاحنات الشرق',RELAY_LINKS.site],['👥 قروب شاحنات الشرق',RELAY_LINKS.group],['📢 قناة الحمولات',RELAY_LINKS.channel]];
  return [body,...links.filter(([,url])=>!body.includes(url)).map(([label,url])=>label+'\n'+url)].join('\n\n');
 }
