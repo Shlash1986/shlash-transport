@@ -1,6 +1,11 @@
 import {readFile,writeFile,rename,rm,statfs,opendir,lstat} from 'node:fs/promises';
 
+import {gzip,gunzip,constants} from 'node:zlib';
+import {promisify} from 'node:util';
 import {dirname,join} from 'node:path';
+
+const compress=promisify(gzip);
+const decompress=promisify(gunzip);
 
 const THREE_HOURS=3*60*60*1000;
 const DAY=24*60*60*1000;
@@ -29,7 +34,9 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
    console.info('Delivery volume file bytes',JSON.stringify(sizes));
   }
   try{
-   const saved=JSON.parse(await readFile(path,'utf8'));
+   const bytes=await readFile(path);
+   const decoded=bytes[0]===0x1f && bytes[1]===0x8b ? await decompress(bytes) : bytes;
+   const saved=JSON.parse(decoded.toString('utf8'));
    if(saved.version!==1||['processed','freight','retries','outbox'].some(k=>!saved[k]||typeof saved[k]!=='object'||Array.isArray(saved[k])))throw new Error('Invalid delivery state');
    data=saved;
   }catch(error){if(error.code!=='ENOENT')throw error;}
@@ -37,7 +44,7 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
  let writes=Promise.resolve();
  function save(){
   if(!path)return Promise.resolve();
-  const task=writes.then(async()=>{await writeFile(path+'.tmp',JSON.stringify(data),{mode:0o600});await rename(path+'.tmp',path);});
+  const task=writes.then(async()=>{const bytes=await compress(JSON.stringify(data),{level:constants.Z_BEST_SPEED});await writeFile(path+'.tmp',bytes,{mode:0o600});await rename(path+'.tmp',path);});
   writes=task.catch(()=>{});return task;
  }
  function prune(){
