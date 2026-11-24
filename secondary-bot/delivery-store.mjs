@@ -7,6 +7,7 @@ import {dirname,join} from 'node:path';
 const compress=promisify(gzip);
 const decompress=promisify(gunzip);
 
+const CLEANUP_INTERVAL_MS=15*60*1000;
 const THREE_HOURS=3*60*60*1000;
 const DAY=24*60*60*1000;
 
@@ -77,14 +78,14 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
  }
  if(path){
   await cleanup();
-  setInterval(()=>{void cleanup();},60000).unref();
+  setInterval(()=>{void cleanup();},CLEANUP_INTERVAL_MS).unref();
  }
  return {data,save,
   async put(bucket,key,value){
    if(bucket==='outbox'&&(value.status==='sent'||value.status==='expired')){
     value={...value,completedAt:data.outbox[key]?.completedAt??now()};
    }
-   data[bucket][key]=value;prune();await save();return value;
+   data[bucket][key]=value;await save();return value;
   },
   async remove(bucket,key){delete data[bucket][key];await save();},
   stats(){const jobs=Object.values(data.outbox);return {pendingIngest:Object.keys(data.retries).length,pendingChannel:jobs.filter(j=>j.status==='pending'||j.status==='receipt').length,uncertainChannel:jobs.filter(j=>j.status==='sending').length,failedChannel:jobs.filter(j=>j.status==='expired').length};}
