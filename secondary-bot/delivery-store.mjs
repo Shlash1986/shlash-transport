@@ -1,12 +1,33 @@
-import {readFile,writeFile,rename} from 'node:fs/promises';
+import {readFile,writeFile,rename,rm,statfs,opendir,lstat} from 'node:fs/promises';
 
-const SIX_HOURS=6*60*60*1000;
+import {dirname,join} from 'node:path';
+
+const THREE_HOURS=3*60*60*1000;
 const DAY=24*60*60*1000;
 
 // The Railway volume survives restarts. Never persist credentials or media keys.
 export async function createDeliveryStore(path,now=()=>Date.now()){
  let data={version:1,processed:{},freight:{},retries:{},outbox:{}};
  if(path){
+  // A stopped writer can leave a partial temporary copy on the full volume.
+  await rm(path+'.tmp',{force:true});
+  const disk=await statfs(dirname(path)).catch(()=>null);
+  if(disk)console.info('Delivery volume available MiB',Math.floor(disk.bavail*disk.bsize/1048576));
+  if(disk && disk.bavail*disk.bsize<64*1048576 && path.startsWith('/data/')){
+   const sizes={delivery:0,session:0,other:0};
+   async function measure(folder){
+    for await(const entry of await opendir(folder)){
+     const child=join(folder,entry.name);
+     if(entry.isDirectory())await measure(child);
+     else if(entry.isFile()){
+      const category=child===path?'delivery':child.includes('/wa-session-')?'session':'other';
+      sizes[category]+=(await lstat(child)).size;
+     }
+    }
+   }
+   await measure('/data').catch(()=>{});
+   console.info('Delivery volume file bytes',JSON.stringify(sizes));
+  }
   try{
    const saved=JSON.parse(await readFile(path,'utf8'));
    if(saved.version!==1||['processed','freight','retries','outbox'].some(k=>!saved[k]||typeof saved[k]!=='object'||Array.isArray(saved[k])))throw new Error('Invalid delivery state');
@@ -32,7 +53,7 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
    if(job.status!=='sent'&&job.status!=='expired')continue;
    const age=stamp-(job.completedAt??job.at);
    if(age>=DAY){delete data.outbox[key];changed=true;}
-   else if(age>=SIX_HOURS&&!job.compacted){
+   else if(age>=THREE_HOURS&&!job.compacted){
     data.outbox[key]={at:job.at,completedAt:job.completedAt??job.at,status:job.status,compacted:true};
     changed=true;
    }
