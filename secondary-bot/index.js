@@ -858,6 +858,7 @@ await mkdir(dir,{recursive:true});
 const deliveryStore=await createDeliveryStore(dir+'/delivery-state.json');
 const groupRelay=await createChannelGroupRelay({path:dir+'/channel-group-relay.json'});
 let qr='',status='starting';
+let lastDeliveryTick=0;
 let resolvedChannelJid='';
 let groupCount=null,groupCheckError='';
 let activeSocket=null;
@@ -1043,7 +1044,7 @@ async function connect(authDir=dir,candidate=false){
     if(recoveryTimer)clearTimeout(recoveryTimer);recoveryTimer=setTimeout(recoverBuffer,15000);recoveryTimer.unref?.();
     if(periodicGroupTimer)clearTimeout(periodicGroupTimer);periodicRefresh();
     if(retryTimer)clearTimeout(retryTimer);retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();
-    qr='';status='connected';if(!replacementPhone||candidate)groupRelay.connect(sock,()=>activeSocket===sock&&status==='connected');channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
+    qr='';status='connected';lastDeliveryTick=Date.now();if(!replacementPhone||candidate)groupRelay.connect(sock,()=>activeSocket===sock&&status==='connected');channelReaderStatus=channelReader.state;channelReader.start();(async()=>{try{const metadata=await sock.newsletterMetadata('invite',CHANNEL_INVITE);resolvedChannelJid=String(metadata?.id||'');console.log('TruckLink channel resolved',Boolean(resolvedChannelJid));void syncChannelBrand(sock,metadata);await publishRequestedChannelPost(sock);}catch(err){console.error('Channel resolution pending',String(err));}})();void refreshJoinedGroups(sock,true);}
    if(connection==='close'){
     drain.stop();if(drainTimer)clearTimeout(drainTimer);
     if(recoveryTimer)clearTimeout(recoveryTimer);
@@ -1054,7 +1055,7 @@ async function connect(authDir=dir,candidate=false){
     if(groupRefreshTimer)clearTimeout(groupRefreshTimer);if(periodicGroupTimer)clearTimeout(periodicGroupTimer);if(retryTimer)clearTimeout(retryTimer);
     const code=lastDisconnect?.error?.output?.statusCode;
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
-    if(selected){qr='';status='disconnected';}
+    if(selected){qr='';status=code===DisconnectReason.loggedOut?'logged_out':'disconnected';}
     if(waiting){replacementQr='';replacementCode='';replacementStatus=code===DisconnectReason.loggedOut?'logged_out':'reconnecting';}
     console.warn('WhatsApp disconnected',code);
     if((selected||waiting)&&code!==DisconnectReason.loggedOut&&!reconnectTimers.has(authDir)){
@@ -1190,12 +1191,15 @@ async function connect(authDir=dir,candidate=false){
     for(const [key,job] of due){
      if(Date.now()-Number(job.message.messageTimestamp)*1000>86400000){await deliveryStore.remove('retries',key);console.warn('Ingest retry expired',key);continue;}
      await enqueueMessages({type:'notify',messages:[job.message]});
+     lastDeliveryTick=Date.now();
     }
     for(const [adId,job] of Object.entries(deliveryStore.data.outbox).filter(([,j])=>['pending','receipt'].includes(j.status)&&j.next<=Date.now()).sort(([,a],[,b])=>freightPriority(a.text)-freightPriority(b.text)).slice(0,20)){
      if(Date.now()-job.at>86400000&&job.status==='pending'){await deliveryStore.put('outbox',adId,{...job,status:'expired'});continue;}
      try{const sent=await sendNumberedChannelAd(sock,String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||job.channel||''),job.parsed,job.text,adId,job.sourceId);if(sent?.key?.id)publishedChannel++;}
      catch(error){const current=deliveryStore.data.outbox[adId];await deliveryStore.put('outbox',adId,{...current,next:Date.now()+60000});console.warn('Channel delivery pending',JSON.stringify({adId,status:current.status,error:String(error).slice(0,160)}));}
+     lastDeliveryTick=Date.now();
     }
+    lastDeliveryTick=Date.now();
    }
   }catch(error){console.error('Delivery retry worker error',String(error));}
   finally{if(activeSocket===sock){retryTimer=setTimeout(retryPending,30000);retryTimer.unref?.();}}
@@ -1237,6 +1241,11 @@ http.createServer(async(req,res)=>{
   res.setHeader('Content-Security-Policy',"default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'");
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8'});
   res.end(`<!doctype html><html lang="ar" dir="rtl"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="10"><title>ربط واتساب TruckLink</title><style>body{font-family:system-ui;max-width:480px;margin:32px auto;padding:20px;text-align:center;background:#f3faf6;color:#173c2d}img{width:280px;max-width:90%}button{padding:14px;border:0;border-radius:8px;background:#147a51;color:white;font-size:18px}.code{font-size:36px;font-weight:bold;letter-spacing:4px}</style><h1>ربط واتساب TruckLink</h1><p dir="ltr">+${replacementPhone}</p><p>${stateText}</p>${replacementCode?`<p class="code" dir="ltr">${replacementCode.slice(0,4)}-${replacementCode.slice(4)}</p><p>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف، ثم أدخل الكود.</p>`:replacementQr?`<img alt="رمز ربط واتساب" src="/pair-new/qr?token=${encodeURIComponent(access)}"><p>امسح الرمز من واتساب الرقم الجديد ← الأجهزة المرتبطة ← ربط جهاز.</p><form method="post" action="${pairingUrl}"><button>الربط بكود على نفس الهاتف</button></form>`:''}<p>بعد الربط، يجب أن يكون الرقم الجديد عضوًا في مجموعات الشحن ومشرفًا في القناة.</p></html>`);return;
+ }
+ if(u.pathname==='/live'){
+  const pairing=['scan','logged_out','wrong_number','code_ready'].includes(replacementStatus)||['scan','logged_out'].includes(status);
+  const healthy=status==='connected' ? Date.now()-lastDeliveryTick<5*60*1000 : pairing;
+  res.writeHead(healthy?200:503,{'Cache-Control':'no-store'});res.end();return;
  }
  if(u.pathname==='/health'){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({revision:'offline-batch-drain-20261020',connectionRecovery,offlineSync,freightPriority:'syria_first',groupRelay:groupRelay.snapshot(),delivery:deliveryStore.stats(),channelReader:channelReaderStatus,receivedChannelMessages,channelBrand,messageDiagnostics,ai:getAIStatus(),replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,status,privateMessaging:false,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,channelResolved:!!resolvedChannelJid,groupCount,lastReceivedAt}));return;}
  const token=process.env.PAIRING_TOKEN;
