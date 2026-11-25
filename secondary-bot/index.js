@@ -113,7 +113,7 @@ trailers.unshift([/(?:^|[^\p{L}])تك(?=$|[^\p{L}])/u,"تك"],[/(?:^|[^\p{L}])ا
 // Verified spellings from rejected dispatch messages.
 add("سوريا",["سرمده","الدانا","دانا"]);
 add("السعودية",["ميناء ينبع التجاري","ميناء نيوم","ملهم","الدوادمي","الدوادمى"]);
-add("مصر",["القطامية","القطاميه","الإسكندرية","اسكندريه","مطار القاهرة","مطار القاهره","مطار القاهره قرية البضائع"]);
+add("مصر",["نويبع","القطامية","القطاميه","الإسكندرية","اسكندريه","مطار القاهرة","مطار القاهره","مطار القاهره قرية البضائع"]);
 add("السعودية",["القصيم بريدة","القصيم بريده"]);
 trailers.unshift([/(?:^|[^\p{L}])ستارا(?=$|[^\p{L}])/u,"ستارة"]);
 function placeBoundary(text,index){
@@ -385,7 +385,7 @@ async function resolveSenderPhone(sock,m){
  }
  return null;
 }
-function normalizeContact(raw            ,fallback            ,country            ){
+function normalizeContact(raw, fallback, country, destinationCountry){
   const dial    ={"السعودية":"966","سوريا":"963","الأردن":"962","العراق":"964","الإمارات":"971","لبنان":"961","عُمان":"968","الكويت":"965","قطر":"974","البحرين":"973","تركيا":"90","مصر":"20","اليمن":"967"};
   const cc=country?dial[country]:null;
   const format=(value            )=>{
@@ -394,6 +394,10 @@ function normalizeContact(raw            ,fallback            ,country          
     if(s.startsWith("00"))s="+"+s.slice(2);
     if(s.startsWith("+"))return s;
     const digits=s.replace(/\D/g,"");
+    // A domestic Egyptian mobile has 11 digits. On Egypt routes the loading
+    // country's dial code is not evidence that the contact belongs there.
+    if (/^01[0125][0-9]{8}$/.test(digits) &&
+        (country==='مصر' || destinationCountry==='مصر')) return '+20'+digits.slice(1);
     if(cc){
       if(digits.startsWith(cc))return "+"+digits;
       if(digits.startsWith("0"))return "+"+cc+digits.replace(/^0+/,"");
@@ -568,7 +572,7 @@ function parse(rawText       ,fallbackContact            =null){
   const cg=cargo(freightText);
   let fc=rt?(rt.from_country||inferCountry(rt.from_city)):null;
   let toc=rt?(rt.to_country||inferCountry(rt.to_city)):null;
-  const ph=normalizeContact(rawPh,fallbackContact,fc||toc);
+  const ph=normalizeContact(rawPh,fallbackContact,fc||toc,toc);
   // Vehicle + named cargo + explicit route is also a load request without "مطلوب".
   const implicitLoadRequest=!availabilityHint&&Boolean(tr)&&cg!=="حمولة غير محددة"&&Boolean(explicitRoute(freightText));
   const wanted=implicitLoadRequest||vehicleRequest||/(?:بدنا|بدي|نبي|عايزين|عاوزين|سياره\s+تحمل|سيارة\s+تحمل|مطلوب|مطلوبه|مطلوبة|مطلوبين|نحتاج|يلزم|يلزمنا|يلزمنه|لازمنا|لازمني|لزمنا|بحاجه|بحاجة|نريد|تحميل|حموله|حمولة|حمل|تنقل|نقل|برادات\s+من|براد\s+من)/u.test(n);
@@ -708,7 +712,7 @@ function validateAIParse(text,data,fallbackContact){
  if(reversed===null)return null;
  const directed=reversed||explicitRoute(normalize(text));
  if(directed&&(from.city!==directed.from_city||from.country!==directed.from_country||to?.city!==directed.to_city||to?.country!==directed.to_country))return null;
- const contact=normalizeContact(phone(text),fallbackContact,from.country);
+ const contact=normalizeContact(phone(text),fallbackContact,from.country,to?.country);
  if(!contact)return null;
  const literal=(value)=>typeof value==='string'&&value.length<=80&&normalize(text).includes(normalize(value))?value:null;
  const load={transport_scope:to&&from.country!==to.country?'international':'local',load_mode:'FTL',from_city:from.city,from_country:from.country,to_city:to?.city||null,to_country:to?.country||null,cargo_type:cargo(text)!=='حمولة غير محددة'?cargo(text):literal(data.cargo_type)||'حمولة غير محددة',required_trailer_type:trailer(text)||literal(data.vehicle_type)||'غير محدد',weight_tons:weight(text),trucks_required:count(text),contact_phone:contact,contact_whatsapp:contact,posted_on_behalf:true,notes:text.slice(0,1200),status:'open',load_kind:'cargo',ad_duration_days:1,contact_visibility:'registered'};
