@@ -592,9 +592,9 @@ function parse(rawText       ,fallbackContact            =null){
 }
 
 // Presentation only: never change the parsed payload or infer missing details.
-function formatChannelAd(parsed,rawText='',publication=null){
+function formatChannelAd(parsed,rawText='',publication=null,adId=''){
  const l=parsed.load||{},isTruck=parsed.kind==='truck_available';
- const known=value=>value&&!/غير محدد/u.test(String(value))?String(value).trim():'';
+ const known=value=>value&&!/غير محدد/u.test(String(value))?String(value).replace(/https?:\/\/\S+|\+?\d[\d\s().-]{6,}\d/gu,'').replace(/[\r\n]+/g,' ').trim().slice(0,120):'';
  const vehicle=known(l.required_trailer_type);
  const contact=l.contact_phone||l.contact_whatsapp||'';
  const clean=cleanFreightLinks(rawText).replace(/[٠-٩۰-۹]/g,d=>ARABIC_DIGITS[d]||d)
@@ -632,21 +632,11 @@ function formatChannelAd(parsed,rawText='',publication=null){
  if(known(l.cargo_type))lines.push('📦 الحمولة: '+l.cargo_type);
  if(l.weight_tons>0)lines.push('⚖️ الوزن: '+l.weight_tons+' طن');
  if(l.trucks_required>1)lines.push('🔢 عدد الشاحنات: '+l.trucks_required);
- const represented=[from,...destinations,vehicle,known(l.cargo_type)].filter(Boolean);
- const details=[],seen=new Set();
- for(const raw of clean.split(/\r?\n/)){
-  const line=raw.replace(/[🚛🚚📱📞🌐📍🏁*]/gu,'').replace(/^[\s:：،,|–-]+|[\s:：،,|–-]+$/gu,'').trim();
-  if(!line)continue;
-  let rest=normalize(line);
-  for(const value of represented)rest=rest.split(normalize(value)).join(' ');
-  rest=rest.replace(/(?:^|\s)(?:مطلوب|من|الي|الى|علي|على|باتجاه|متوفر|متاحة|متاح|فارغة|فارغ|فاضي|فاضية|عالفاضي|جاهزة|جاهز|للتحميل|التحميل|و|او)(?=\s|$)/gu,' ').replace(/[^\p{L}\p{N}]+/gu,'').trim();
-  if(!rest)continue;
-  const key=normalize(line);if(!seen.has(key)){seen.add(key);details.push(line);}
- }
- if(details.length)lines.push('','📝 التفاصيل:',...details);
- if(contact)lines.push('','📞 للتواصل:','\u200e'+contact+'\u200e');
- lines.push('','🌐 شاحنات الشرق','https://easttrucks.com/','','🚛 أكثر من 500 حمولة يومياً','📲 حمّل تطبيق شاحنات الشرق الأوسط مجاناً');
- return cleanFreightLinks(lines.join('\n'));
+ const url=new URL('https://easttrucks.com/');
+ if(adId){url.searchParams.set('open',isTruck?'trucks':'loads');url.searchParams.set('id',adId);}
+ url.searchParams.set('utm_source','whatsapp');url.searchParams.set('utm_medium','channel');url.searchParams.set('utm_campaign','freight');
+ lines.push('','🔗 التفاصيل ورقم التواصل عبر منصة شاحنات الشرق:',url.toString(),'','تصفح المزيد من الحمولات مجاناً على المنصة.');
+ return lines.join('\n');
 }
 
 // Split repeated requests before parsing. Share only a sole trailing contact,
@@ -783,7 +773,7 @@ function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
   if(!Number.isSafeInteger(reference.ad_number)||reference.ad_number<3000||!Number.isInteger(reference.daily_number)||reference.daily_number<1||!/^\d{4}-\d{2}-\d{2}$/.test(reference.day))throw new Error('Invalid publication reference');
   if(activeSocket!==sock||status!=='connected'||sock.ws?.isOpen===false)throw new Error('Channel waiting for active connection');
   await deliveryStore.put('outbox',adId,{...job,status:'sending'});
-  const channelText=formatChannelAd(parsed,text,reference);
+  const channelText=formatChannelAd(parsed,text,reference,adId);
   let sent;
   try{sent=await sock.sendMessage(channel,{text:channelText,linkPreview:null});}
   catch(error){
