@@ -44,7 +44,7 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
  let writes=Promise.resolve();
  function save(){
   if(!path)return Promise.resolve();
-  const task=writes.then(async()=>{const bytes=await compress(JSON.stringify(data),{level:constants.Z_BEST_SPEED});await writeFile(path+'.tmp',bytes,{mode:0o600});await rename(path+'.tmp',path);});
+  const task=writes.then(async()=>{const bytes=await compress(JSON.stringify(data),{level:constants.Z_BEST_SPEED});try{await writeFile(path+'.tmp',bytes,{mode:0o600});await rename(path+'.tmp',path);}catch(error){await rm(path+'.tmp',{force:true});if(error.code!=='ENOSPC')throw error;const previous=await lstat(path).catch(()=>null);if(!previous||previous.size<=bytes.length)throw error;/* Freight-only cache: reclaim its old blocks when atomic replacement cannot fit. Never touch auth files. */await rm(path,{force:true});await writeFile(path,bytes,{mode:0o600});console.warn('Freight cache compacted under disk pressure');}});
   writes=task.catch(()=>{});return task;
  }
  function prune(){
@@ -79,7 +79,7 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
    if(bucket==='outbox'&&(value.status==='sent'||value.status==='expired')){
     value={...value,completedAt:data.outbox[key]?.completedAt??now()};
    }
-   data[bucket][key]=value;await save();return value;
+   data[bucket][key]=value;prune();await save();return value;
   },
   async remove(bucket,key){delete data[bucket][key];await save();},
   stats(){const jobs=Object.values(data.outbox);return {pendingIngest:Object.keys(data.retries).length,pendingChannel:jobs.filter(j=>j.status==='pending'||j.status==='receipt').length,uncertainChannel:jobs.filter(j=>j.status==='sending').length,failedChannel:jobs.filter(j=>j.status==='expired').length};}
