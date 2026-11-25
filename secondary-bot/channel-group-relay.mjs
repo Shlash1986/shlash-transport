@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-import {createDeliveryStore} from './delivery-store.mjs';
+import {createDeliveryStore,FREIGHT_RETENTION_MS} from './delivery-store.mjs';
 import {createChannelReader} from './channel-reader.mjs';
 
 export const RELAY_CHANNEL='120363428757778414@newsletter';
@@ -12,7 +12,7 @@ export const RELAY_LINKS={
  channel:'https://whatsapp.com/channel/0029Vb88HmiK0IBl4La1aC1Q',
  group:'https://chat.whatsapp.com/'+RELAY_GROUP_INVITE
 };
-const DAY=86400000;
+
 export function isRelayText(text){return Object.values(RELAY_LINKS).every(link=>String(text||'').includes(link));}
 // Compare complete destinations. Ignore sharing parameters only on the official invites.
 export function cleanFreightLinks(value){
@@ -92,7 +92,7 @@ export async function createChannelGroupRelay({path,now=()=>Date.now(),log=conso
     state.status='active';state.lastError=null;
     for(const [key,job] of Object.entries(store.data.outbox).filter(([,j])=>j.status==='pending').slice(0,10)){
      if(!active())return;
-     if(now()-job.at>DAY){await store.put('outbox',key,{...job,status:'expired'});continue;}
+     if(now()-job.at>=FREIGHT_RETENTION_MS){await store.put('outbox',key,{...job,status:'expired'});continue;}
      await store.put('outbox',key,{...job,status:'sending',group:target.id});
      const current=sock;
      const sent=await current.sendMessage(target.id,{text:formatGroupRelay(job.text),linkPreview:null});
@@ -109,7 +109,7 @@ export async function createChannelGroupRelay({path,now=()=>Date.now(),log=conso
  async function accept(message){
   if(message.key?.remoteJid!==RELAY_CHANNEL)return false;
   const stamp=Number(message.messageTimestamp)*1000;
-  if(!Number.isFinite(stamp)||stamp<Math.max(store.data.relaySince,now()-DAY)||stamp>now()+60000)return false;
+  if(!Number.isFinite(stamp)||stamp<Math.max(store.data.relaySince,now()-FREIGHT_RETENTION_MS)||stamp>now()+60000)return false;
   const text=messageText(message.message);
   if(!text){state.unsupported++;return false;}
   const sourceId=String(message.key?.server_id||message.server_id||message.key?.id||'');
@@ -117,7 +117,7 @@ export async function createChannelGroupRelay({path,now=()=>Date.now(),log=conso
   const accepted=await serial(async()=>{
    const fingerprint=createHash('sha256').update(text.replace(/\s+/gu,' ').trim()).digest('hex');
    const previous=store.data.outbox[fingerprint];
-   if(store.data.processed[sourceId]||previous&&(['pending','sending'].includes(previous.status)||now()-previous.at<=DAY))return false;
+   if(now()-store.data.processed[sourceId]<FREIGHT_RETENTION_MS||previous&&now()-previous.at<FREIGHT_RETENTION_MS)return false;
    await store.put('outbox',fingerprint,{at:stamp,text,sourceId,status:'pending'});
    await store.put('processed',sourceId,now());
    return true;

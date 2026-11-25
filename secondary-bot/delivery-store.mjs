@@ -7,9 +7,8 @@ import {dirname,join} from 'node:path';
 const compress=promisify(gzip);
 const decompress=promisify(gunzip);
 
-const CLEANUP_INTERVAL_MS=15*60*1000;
-const ONE_HOUR=60*60*1000;
-const DAY=24*60*60*1000;
+const CLEANUP_INTERVAL_MS=60*1000;
+export const FREIGHT_RETENTION_MS=60*60*1000;
 
 // The Railway volume survives restarts. Never persist credentials or media keys.
 export async function createDeliveryStore(path,now=()=>Date.now()){
@@ -51,19 +50,14 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
  function prune(){
   const stamp=now();
   let changed=false;
-  // Retain only identifiers for the full WhatsApp replay window.
-  for(const name of ['processed','freight']){
-   for(const [key,at] of Object.entries(data[name])){
-    if(stamp-at>=DAY){delete data[name][key];changed=true;}
-   }
-  }
-  for(const [key,job] of Object.entries(data.outbox)){
-   if(job.status!=='sent'&&job.status!=='expired')continue;
-   const age=stamp-(job.completedAt??job.at);
-   if(age>=DAY){delete data.outbox[key];changed=true;}
-   else if(age>=ONE_HOUR&&!job.compacted){
-    data.outbox[key]={at:job.at,completedAt:job.completedAt??job.at,status:job.status,compacted:true};
-    changed=true;
+  for(const bucket of ['processed','freight','retries','outbox']){
+   for(const [key,value] of Object.entries(data[bucket])){
+    const at=bucket==='retries' ? Number(value.message?.messageTimestamp)*1000 :
+     bucket==='outbox' ? value.at : value;
+    if(!(Number(at)>stamp-FREIGHT_RETENTION_MS)){
+     delete data[bucket][key];
+     changed=true;
+    }
    }
   }
   return changed;
