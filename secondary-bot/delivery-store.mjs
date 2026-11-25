@@ -8,7 +8,7 @@ const compress=promisify(gzip);
 const decompress=promisify(gunzip);
 
 const CLEANUP_INTERVAL_MS=15*60*1000;
-const THREE_HOURS=3*60*60*1000;
+const ONE_HOUR=60*60*1000;
 const DAY=24*60*60*1000;
 
 // The Railway volume survives restarts. Never persist credentials or media keys.
@@ -61,7 +61,7 @@ export async function createDeliveryStore(path,now=()=>Date.now()){
    if(job.status!=='sent'&&job.status!=='expired')continue;
    const age=stamp-(job.completedAt??job.at);
    if(age>=DAY){delete data.outbox[key];changed=true;}
-   else if(age>=THREE_HOURS&&!job.compacted){
+   else if(age>=ONE_HOUR&&!job.compacted){
     data.outbox[key]={at:job.at,completedAt:job.completedAt??job.at,status:job.status,compacted:true};
     changed=true;
    }
