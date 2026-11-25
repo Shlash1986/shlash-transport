@@ -727,6 +727,7 @@ function validateAIParse(text,data,fallbackContact){
  const load={transport_scope:to&&from.country!==to.country?'international':'local',load_mode:'FTL',from_city:from.city,from_country:from.country,to_city:to?.city||null,to_country:to?.country||null,cargo_type:cargo(text)!=='حمولة غير محددة'?cargo(text):literal(data.cargo_type)||'حمولة غير محددة',required_trailer_type:trailer(text)||literal(data.vehicle_type)||'غير محدد',weight_tons:weight(text),trucks_required:count(text),contact_phone:contact,contact_whatsapp:contact,posted_on_behalf:true,notes:text.slice(0,1200),status:'open',load_kind:'cargo',ad_duration_days:1,contact_visibility:'registered'};
  return {kind:data.kind,publishable:true,confidence:data.confidence,reason:null,load,parser:'openai'};
 }
+import * as baileys from '@whiskeysockets/baileys';
 import makeWASocket,{useMultiFileAuthState,DisconnectReason} from '@whiskeysockets/baileys';
 import QRCode from 'qrcode';
 import {mkdir,writeFile,readFile} from 'node:fs/promises';
@@ -1007,10 +1008,21 @@ async function publishRequestedChannelPost(sock){
  }
 }
 
+let webVersionRequest;
+async function resolveWebVersion(){
+ try{
+  const result=await baileys.fetchLatestWaWebVersion({timeout:8000,signal:AbortSignal.timeout(8000)});
+  if(Array.isArray(result.version)&&result.version.length===3&&result.version.every(Number.isInteger)){
+   console.info('WhatsApp Web version',result.version.join('.'),result.isLatest?'current':'bundled');
+   return result.version;
+  }
+ }catch{console.warn('WhatsApp Web version lookup unavailable; using bundled version');}
+}
 async function connect(authDir=dir,candidate=false){
  if(reconnectTimers.has(authDir)){clearTimeout(reconnectTimers.get(authDir));reconnectTimers.delete(authDir);}
  const {state,saveCreds}=await useMultiFileAuthState(authDir);
- const sock=makeWASocket({logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>{const entry=recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''));return entry&&isRecent(entry.at)?entry.message:undefined;}});
+ const version=await (webVersionRequest??=resolveWebVersion());
+ const sock=makeWASocket({...(version?{version}:{}),browser:baileys.Browsers.macOS('Chrome'),logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>{const entry=recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''));return entry&&isRecent(entry.at)?entry.message:undefined;}});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
  const recovery=createBufferRecovery({sock,isActive:()=>activeSocket===sock&&status==='connected'});
@@ -1058,7 +1070,7 @@ async function connect(authDir=dir,candidate=false){
     const selected=activeSocket===sock,waiting=candidate&&pendingSocket===sock;
     if(selected){qr='';status=code===DisconnectReason.loggedOut?'logged_out':'disconnected';}
     if(waiting){replacementQr='';replacementCode='';replacementStatus=code===DisconnectReason.loggedOut?'logged_out':'reconnecting';}
-    console.warn('WhatsApp disconnected',code);
+    console.warn('WhatsApp disconnected',code,candidate?'publishing account':'legacy account');
     if((selected||waiting)&&code!==DisconnectReason.loggedOut&&!reconnectTimers.has(authDir)){
       const attempts=openedAt&&Date.now()-openedAt>=60000?0:(reconnectAttempts.get(authDir)||0);
       reconnectAttempts.set(authDir,attempts+1);
@@ -1255,7 +1267,6 @@ http.createServer(async(req,res)=>{
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
-
 
 
 
