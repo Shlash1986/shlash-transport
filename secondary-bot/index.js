@@ -1,6 +1,6 @@
 import {createChannelGroupRelay,isRelayText,cleanFreightLinks} from './channel-group-relay.mjs';
 import {socketLogger} from './safe-logging.mjs';
-import {createDeliveryStore} from './delivery-store.mjs';
+import {createDeliveryStore,FREIGHT_RETENTION_MS} from './delivery-store.mjs';
 import {createHash} from 'node:crypto';
 import {createChannelReader,acceptsFreightSource,isChannelJid,channelMessageId} from './channel-reader.mjs';
 import {extractFreightAd,getAIStatus,isFreightCandidate} from './ai-runtime.mjs';
@@ -762,7 +762,7 @@ function sendNumberedChannelAd(sock,channel,parsed,text,adId,sourceId){
  const task=numberedChannelQueue.then(async()=>{
   if(!adId)throw new Error('Published advertisement ID missing');
   let job=deliveryStore.data.outbox[adId];
-  if(!job)job=await deliveryStore.put('outbox',adId,{channel,parsed,text,sourceId,at:Date.now(),status:'pending',next:0});
+  if(!job||!isRecent(job.at))return null;
   if(job.status==='sent')return null;
   // A restart or uncertain send must not generate a second public message.
   if(job.status==='sending')throw new Error('Channel send outcome uncertain; review required');
@@ -876,17 +876,18 @@ const messageDiagnostics={noText:0,duplicate:0,rejected:0,published:0,reasons:{}
 let channelReaderStatus={enabled:true,status:'starting'};
 let receivedChannelMessages=0;
 let receivedGroupMessages=0,publishedLoads=0,publishedTrucks=0,publishedChannel=0,lastReceivedAt=null,lastPublishError='';
-const processedMessages=new Map(Object.entries(deliveryStore.data.processed));
-async function markProcessed(key){processedMessages.set(key,Date.now());await deliveryStore.put('processed',key,Date.now());if(processedMessages.size>5000)processedMessages.delete(processedMessages.keys().next().value);}
+function isRecent(at){return Number(at)>Date.now()-FREIGHT_RETENTION_MS;}
+async function markProcessed(key){await deliveryStore.put('processed',key,Date.now());}
 
-const publishedFreightTexts=new Map(Object.entries(deliveryStore.data.freight)),inFlightFreightTexts=new Set();
+const inFlightFreightTexts=new Set();
 const recentMessages=new Map();
+setInterval(()=>{for(const [key,item] of recentMessages)if(!isRecent(item.at))recentMessages.delete(key);},60000).unref();
 // Owner exclusions: original groups 1–9 plus replacement-account groups
 // 1,2,3,5,6,7,10,13,15,17,22,27 from the verified 31-group list.
 // Non-freight groups identified in the joined-group inventory on 2026-10-11.
 const EXCLUDED_GROUPS=new Set(["120363429798229835@g.us","120363431163392943@g.us","120363402947027837@g.us","120363432040436430@g.us","120363285533629337@g.us","120363032467180231@g.us","120363390071970492@g.us","120363246703383152@g.us","120363430110878767@g.us","120363165708973439@g.us","120363258441959550@g.us","120363306190092623@g.us","120363433294574615@g.us","120363344974964509@g.us","120363423411014709@g.us","120363404559410103@g.us","120363404408158364@g.us","120363412699593606@g.us","4915780883324-1493381833@g.us","120363409325566982@g.us","120363364912181752@g.us","120363406171014799@g.us","120363408358449149@g.us","120363425579086719@g.us","905523903152-1583927147@g.us"]);
 let monitoredGroupCount=null;
-function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,m.message);if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
+function rememberMessage(m){if(!m.message)return;const k=String(m.key?.remoteJid||'')+':'+String(m.key?.id||'');recentMessages.set(k,{at:Number(m.messageTimestamp||Date.now()/1000)*1000,message:m.message});if(recentMessages.size>250)recentMessages.delete(recentMessages.keys().next().value);}
 
 const CHANNEL_INVITE='0029Vb88HmiK0IBl4La1aC1Q';
 const ownChannelJids=()=>['120363428757778414@newsletter',resolvedChannelJid,String(process.env.TARGET_CHANNEL_JID||'')];
@@ -1009,7 +1010,7 @@ async function publishRequestedChannelPost(sock){
 async function connect(authDir=dir,candidate=false){
  if(reconnectTimers.has(authDir)){clearTimeout(reconnectTimers.get(authDir));reconnectTimers.delete(authDir);}
  const {state,saveCreds}=await useMultiFileAuthState(authDir);
- const sock=makeWASocket({logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''))});
+ const sock=makeWASocket({logger:socketLogger,auth:state,printQRInTerminal:false,markOnlineOnConnect:false,syncFullHistory:false,shouldSyncHistoryMessage:()=>false,getMessage:async(key)=>{const entry=recentMessages.get(String(key?.remoteJid||'')+':'+String(key?.id||''));return entry&&isRecent(entry.at)?entry.message:undefined;}});
  if(candidate)pendingSocket=sock;else activeSocket=sock;
  sock.ev.on('creds.update',saveCreds);
  const recovery=createBufferRecovery({sock,isActive:()=>activeSocket===sock&&status==='connected'});
@@ -1083,11 +1084,11 @@ async function connect(authDir=dir,candidate=false){
        if(fromChannel&&m.key?.fromMe)continue;
        const sourceMessageId=fromChannel?channelMessageId(m):m.key?.id;
        if(!sourceMessageId)continue;
-       rememberMessage(m);
        if(!m.message)continue;
        const stamp=Number(m.messageTimestamp||0)*1000;
        if(fromChannel&&(!Number.isFinite(stamp)||stamp<=0||stamp>Date.now()+60000))continue;
-       if(stamp && Date.now()-stamp>24*60*60*1000)continue;
+       if(stamp && Date.now()-stamp>=FREIGHT_RETENTION_MS)continue;
+       rememberMessage(m);
        if(fromChannel)receivedChannelMessages++;else receivedGroupMessages++;lastReceivedAt=new Date().toISOString();
        if(process.env.BOT_LOG_LEVEL==='debug')console.log(fromChannel?'Channel message received':'Group message received',JSON.stringify({group:jid,id:sourceMessageId}));
        const originalText=getText(m.message);
@@ -1103,7 +1104,7 @@ async function connect(authDir=dir,candidate=false){
        const text=parts[partIndex];
        const messageId=parts.length>1?sourceMessageId+':part:'+(partIndex+1):sourceMessageId;
        const cacheKey=jid+':'+messageId;
-       if(processedMessages.has(cacheKey))continue;
+       if(isRecent(deliveryStore.data.processed[cacheKey]))continue;
        freightKey=null;
        try{
        const preliminary=parse(text,senderPhone);
@@ -1112,7 +1113,7 @@ async function connect(authDir=dir,candidate=false){
          let deferred=null;
          // A fresh Gulf message must not consume the next AI slot while Syrian
          // freight is already waiting for its retry timer after a quota limit.
-         const syrianWaiting=freightPriority(text)>0&&Object.entries(deliveryStore.data.retries).some(([key,job])=>key!==retryKey&&job.aiDeferred&&Date.now()-Number(job.message.messageTimestamp)*1000<86400000&&freightPriority(getText(job.message.message))===0);
+         const syrianWaiting=freightPriority(text)>0&&Object.entries(deliveryStore.data.retries).some(([key,job])=>key!==retryKey&&job.aiDeferred&&Date.now()-Number(job.message.messageTimestamp)*1000<FREIGHT_RETENTION_MS&&freightPriority(getText(job.message.message))===0);
          if(syrianWaiting)deferred={reason:'syria_priority',retryAfterMs:30000};
          const ai=deferred?null:await extractFreightAd(text,{onDeferred:reason=>{deferred=reason;}});
          if(deferred){
@@ -1129,8 +1130,8 @@ async function connect(authDir=dir,candidate=false){
        if(!shouldPublish){messageDiagnostics.rejected++;const reason=finalParsed.reason||'low_confidence';messageDiagnostics.reasons[reason]=(messageDiagnostics.reasons[reason]||0)+1;console.log('Freight skipped',JSON.stringify({id:m.key.id,kind:finalParsed.kind,reason:finalParsed.reason||'low_confidence'}));if(finalParsed.kind==='unknown')continue;}
        if(shouldPublish){
          const key=createHash('sha256').update(normalize(text).replace(/[\p{P}\p{S}\s]+/gu,' ').trim()+'|'+finalParsed.load.contact_phone).digest('hex');
-         for(const [k,ts] of publishedFreightTexts)if(Date.now()-ts>24*60*60*1000)publishedFreightTexts.delete(k);
-         if(publishedFreightTexts.has(key)||inFlightFreightTexts.has(key)){messageDiagnostics.duplicate++;console.log('Repeated forwarded freight skipped');continue;}
+
+         if(isRecent(deliveryStore.data.freight[key])||inFlightFreightTexts.has(key)){messageDiagnostics.duplicate++;console.log('Repeated forwarded freight skipped');continue;}
          freightKey=key;inFlightFreightTexts.add(key);
        }
        // Retain rejected freight for diagnosis via the existing authenticated RPC;
@@ -1150,7 +1151,7 @@ async function connect(authDir=dir,candidate=false){
        const channel=String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||'');
        if(!deliveryStore.data.outbox[adId])await deliveryStore.put('outbox',adId,{channel,parsed:finalParsed,text:text.slice(0,1200),sourceId:messageId,at:Date.now(),status:'pending',next:0});
        if(outcome.published===true&&!outcome.duplicate)messageDiagnostics.published++;
-       if(freightKey){publishedFreightTexts.set(freightKey,Date.now());await deliveryStore.put('freight',freightKey,Date.now());if(publishedFreightTexts.size>5000)publishedFreightTexts.delete(publishedFreightTexts.keys().next().value);}
+       if(freightKey)await deliveryStore.put('freight',freightKey,Date.now());
        await markProcessed(cacheKey);
        if(outcome.published===true&&!outcome.duplicate){if(isTruck)publishedTrucks++;else publishedLoads++;}
        lastPublishError='';
@@ -1173,13 +1174,13 @@ async function connect(authDir=dir,candidate=false){
   if(batch.type!=='notify'&&batch.type!=='append')return true;
   for(const m of batch.messages||[]){
    const jid=String(m.key?.remoteJid||''),text=getText(m.message),stamp=Number(m.messageTimestamp||0)*1000;
-   if(!text||!acceptsFreightSource(jid,EXCLUDED_GROUPS,ownChannelJids())||!Number.isFinite(stamp)||stamp<=0||stamp>Date.now()+60000||Date.now()-stamp>86400000)continue;
+   if(!text||!acceptsFreightSource(jid,EXCLUDED_GROUPS,ownChannelJids())||!Number.isFinite(stamp)||stamp<=0||stamp>Date.now()+60000||Date.now()-stamp>=FREIGHT_RETENTION_MS)continue;
    if(jid.endsWith('@g.us')&&isRelayText(text))continue;
    if(isChannelJid(jid)&&m.key?.fromMe)continue;
    const id=isChannelJid(jid)?channelMessageId(m):m.key?.id;
    if(!id)continue;
    const key=jid+':'+id;
-   if(!processedMessages.has(key)&&!deliveryStore.data.retries[key])await deliveryStore.put('retries',key,{message:{key:m.key,messageTimestamp:stamp/1000,message:{conversation:text}},attempts:0,next:Date.now()+30000});
+   if(!isRecent(deliveryStore.data.processed[key])&&!deliveryStore.data.retries[key])await deliveryStore.put('retries',key,{message:{key:m.key,messageTimestamp:stamp/1000,message:{conversation:text}},attempts:0,next:Date.now()+30000});
   }
   return enqueueMessages(batch);
  };
@@ -1189,14 +1190,14 @@ async function connect(authDir=dir,candidate=false){
    if(activeSocket===sock&&status==='connected'){
     const due=Object.entries(deliveryStore.data.retries).filter(([,job])=>job.next<=Date.now()).sort(([,a],[,b])=>freightPriority(getText(a.message.message))-freightPriority(getText(b.message.message))).slice(0,20);
     for(const [key,job] of due){
-     if(Date.now()-Number(job.message.messageTimestamp)*1000>86400000){await deliveryStore.remove('retries',key);console.warn('Ingest retry expired',key);continue;}
+     if(Date.now()-Number(job.message.messageTimestamp)*1000>=FREIGHT_RETENTION_MS){await deliveryStore.remove('retries',key);console.warn('Ingest retry expired',key);continue;}
      await enqueueMessages({type:'notify',messages:[job.message]});
      lastDeliveryTick=Date.now();
     }
     for(const [adId,job] of Object.entries(deliveryStore.data.outbox).filter(([,j])=>['pending','receipt'].includes(j.status)&&j.next<=Date.now()).sort(([,a],[,b])=>freightPriority(a.text)-freightPriority(b.text)).slice(0,20)){
-     if(Date.now()-job.at>86400000&&job.status==='pending'){await deliveryStore.put('outbox',adId,{...job,status:'expired'});continue;}
+     if(!isRecent(job.at)){await deliveryStore.remove('outbox',adId);continue;}
      try{const sent=await sendNumberedChannelAd(sock,String(resolvedChannelJid||process.env.TARGET_CHANNEL_JID||job.channel||''),job.parsed,job.text,adId,job.sourceId);if(sent?.key?.id)publishedChannel++;}
-     catch(error){const current=deliveryStore.data.outbox[adId];await deliveryStore.put('outbox',adId,{...current,next:Date.now()+60000});console.warn('Channel delivery pending',JSON.stringify({adId,status:current.status,error:String(error).slice(0,160)}));}
+     catch(error){const current=deliveryStore.data.outbox[adId];if(!current||!isRecent(current.at))continue;await deliveryStore.put('outbox',adId,{...current,next:Date.now()+60000});console.warn('Channel delivery pending',JSON.stringify({adId,status:current.status,error:String(error).slice(0,160)}));}
      lastDeliveryTick=Date.now();
     }
     lastDeliveryTick=Date.now();
@@ -1254,7 +1255,6 @@ http.createServer(async(req,res)=>{
  if(u.pathname==='/qr'&&qr){res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await QRCode.toString(qr,{type:'svg'}));return;}
  res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({revision:'account-migration-20261009',replacementStatus,ingestConnectionStatus,learnedPlaces,placeLearningStatus,knownPlaces:cityCountry.size,manualPublication,excludedGroups:EXCLUDED_GROUPS.size,monitoredGroupCount,receivedGroupMessages,publishedLoads,publishedTrucks,publishedChannel,lastReceivedAt,lastPublishError,status,qrAvailable:!!qr,privateMessaging:false,channelResolved:!!resolvedChannelJid,groupCount,groupCheckError,postingConfigured:!!(process.env.SUPABASE_URL&&process.env.TRUCKLINK_INGEST_TOKEN)}));
 }).listen(Number(process.env.PORT||3000),'0.0.0.0');
-
 
 
 

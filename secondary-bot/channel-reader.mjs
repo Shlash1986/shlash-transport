@@ -127,7 +127,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
     for(const channel of channels){
      if(!allowed(channel.id))continue;
      if(!sources.has(channel.id))sources.set(channel.id,{...channel,subscribeAt:0,pollAt:0,failures:0,lastError:null});
-     const start=Number.isSafeInteger(initialSince)?Math.max(seconds()-86400,Math.min(seconds(),initialSince)):seconds();
+     const start=Number.isSafeInteger(initialSince)?Math.max(seconds()-3600,Math.min(seconds(),initialSince)):seconds();
      checkpoints[channel.id]??={since:start,floor:start};
     }
     state.followed=channels.length;state.monitored=sources.size;state.lastDiscoveryAt=new Date(now()).toISOString();
@@ -163,7 +163,7 @@ export function createChannelReader({sock,isActive,ownChannels,onMessages,stateP
      source.pollAt=now()+120000;
      const checkpoint=checkpoints[jid];
      // A one-minute overlap handles delayed notifications; stable IDs deduplicate it.
-     const since=Math.max(seconds()-86400,checkpoint.floor,checkpoint.since-60);
+     const since=Math.max(seconds()-3600,checkpoint.floor,checkpoint.since-60);
      const pollStarted=seconds();
      const response=await fetchChannelMessages(sock,jid,100);
      if(stopped||!isActive())break;
