@@ -632,10 +632,7 @@ function formatChannelAd(parsed,rawText='',publication=null,adId=''){
  if(known(l.cargo_type))lines.push('📦 الحمولة: '+l.cargo_type);
  if(l.weight_tons>0)lines.push('⚖️ الوزن: '+l.weight_tons+' طن');
  if(l.trucks_required>1)lines.push('🔢 عدد الشاحنات: '+l.trucks_required);
- const url=new URL('https://easttrucks.com/');
- if(adId){url.searchParams.set('open',isTruck?'trucks':'loads');url.searchParams.set('id',adId);}
- url.searchParams.set('utm_source','whatsapp');url.searchParams.set('utm_medium','channel');url.searchParams.set('utm_campaign','freight');
- lines.push('','🔗 التفاصيل ورقم التواصل عبر منصة شاحنات الشرق:',url.toString(),'','تصفح المزيد من الحمولات مجاناً على المنصة.');
+ lines.push('','📲 للتفاصيل ورقم التواصل، ادخل إلى منصة شاحنات الشرق:','https://easttrucks.com/','','🌐 تصفح الحمولات والشاحنات مجاناً.');
  return lines.join('\n');
 }
 
